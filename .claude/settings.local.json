@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(if \\($env:ANTIGRAVITY_ROOT\\) { Write-Output \"ROOT=$env:ANTIGRAVITY_ROOT\"; Test-Path \"$env:ANTIGRAVITY_ROOT\\\\scripts\\\\init-project.ps1\" } else { Write-Output \"ANTIGRAVITY_ROOT no definido\" }; Test-Path \".ai\")"
+    ]
+  }
+}
