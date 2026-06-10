@@ -1,0 +1,8 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Timestamps como TEXT ISO-8601 (RNF-12: base de la resolución de
+          # conflictos en sync). Nunca cambiar tras publicar la v1.
+          store_date_time_values_as_text: true
