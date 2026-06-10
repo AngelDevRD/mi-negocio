@@ -32,6 +32,11 @@ dependencies:
   intl: ^0.20.2
   path_provider: ^2.1.5
 
+  # Licencias (F3): backend Supabase + identidad del dispositivo + conectividad
+  supabase_flutter: ^2.8.0
+  device_info_plus: ^11.0.0
+  connectivity_plus: ^6.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
