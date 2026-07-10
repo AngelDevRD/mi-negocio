@@ -5,10 +5,11 @@
 // Desplegar: supabase functions deploy licencias
 //
 // Acciones (POST JSON { action, ... }):
-//   solicitar : { nombreNegocio, telefono, emailAdmin, deviceId, tipoDeseado }
+//   solicitar : { nombreNegocio, telefono, deviceId, tipoDeseado }
 //   activar   : { clave, deviceId }
 //   validar   : { clave, deviceId }
-// Respuesta: { ok: boolean, licencia?: {...}, error?: string }
+//   renovar   : { clave, deviceId }
+// Respuesta: { ok: boolean, licencia?: {...}, error?: string, mensaje?: string }
 // =====================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -59,15 +60,14 @@ async function registrarHistorial(
 }
 
 async function solicitar(body: Record<string, unknown>): Promise<Response> {
-  const { nombreNegocio, telefono, emailAdmin, deviceId, tipoDeseado } = body;
-  if (!nombreNegocio || !emailAdmin || !deviceId) {
+  const { nombreNegocio, telefono, deviceId, tipoDeseado } = body;
+  if (!nombreNegocio || !deviceId) {
     return json({ ok: false, error: "Faltan datos de la solicitud." }, 400);
   }
   const { error } = await supabase.from("solicitudes_licencia").insert({
     tipo_solicitud: "nueva",
     nombre_negocio: nombreNegocio,
     telefono: telefono ?? null,
-    email_admin: emailAdmin,
     device_id: deviceId,
     tipo_licencia_deseada: tipoDeseado ?? "local",
   });
@@ -161,6 +161,38 @@ async function validar(body: Record<string, unknown>): Promise<Response> {
   return json({ ok: true, licencia: dto(lic) });
 }
 
+async function renovar(body: Record<string, unknown>): Promise<Response> {
+  const { clave, deviceId } = body;
+  if (!clave || !deviceId) {
+    return json({ ok: false, error: "Clave y dispositivo requeridos." }, 400);
+  }
+  const lic = await buscarLicencia(clave as string);
+  if (!lic) return json({ ok: false, error: "Clave de licencia inválida." }, 404);
+
+  if (lic.device_id_principal && lic.device_id_principal !== deviceId) {
+    return json({
+      ok: false,
+      error: "La licencia pertenece a otro dispositivo.",
+    });
+  }
+
+  const { error } = await supabase.from("solicitudes_licencia").insert({
+    tipo_solicitud: "renovacion",
+    negocio_id: lic.negocio_id,
+    licencia_id: lic.id,
+    device_id: deviceId,
+    estado: "pendiente",
+  });
+  if (error) return json({ ok: false, error: error.message }, 500);
+
+  await registrarHistorial(lic.id, "renovacion_solicitada", { deviceId });
+  return json({
+    ok: true,
+    mensaje:
+      "Solicitud de renovación enviada. Se reflejará al confirmarse el pago.",
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return json({ ok: false, error: "Método no soportado." }, 405);
@@ -174,6 +206,8 @@ Deno.serve(async (req) => {
         return await activar(body);
       case "validar":
         return await validar(body);
+      case "renovar":
+        return await renovar(body);
       default:
         return json({ ok: false, error: "Acción desconocida." }, 400);
     }

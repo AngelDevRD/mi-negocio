@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/supabase_config.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/errors/result.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../data/datasources/license_local_datasource.dart';
 import '../../data/datasources/license_remote_datasource.dart';
 import '../../data/repositories/license_repository_impl.dart';
@@ -53,7 +54,16 @@ class LicenseController extends AsyncNotifier<LicenseCheck> {
   LicenseRepository get _repo => ref.read(licenseRepositoryProvider);
 
   @override
-  Future<LicenseCheck> build() => _repo.verificarAlArranque();
+  Future<LicenseCheck> build() async {
+    final check = await _repo.verificarAlArranque();
+    if (check case LicenciaActiva(:final licencia)) {
+      final dias = licencia.diasParaVencer(DateTime.now().toUtc());
+      if (dias != null && dias <= diasAlertaRenovacion) {
+        await NotificationService.instance.notificarVencimientoProximo(dias);
+      }
+    }
+    return check;
+  }
 
   /// Devuelve el fallo si lo hubo; `null` = éxito (la UI muestra el mensaje).
   Future<Failure?> activarDemo() async {
@@ -81,13 +91,11 @@ class LicenseController extends AsyncNotifier<LicenseCheck> {
   /// Devuelve (mensajeDeConfirmacion, fallo).
   Future<(String?, Failure?)> solicitar({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String tipoDeseado,
   }) async {
     final result = await _repo.solicitarLicencia(
       nombreNegocio: nombreNegocio,
-      emailAdmin: emailAdmin,
       telefono: telefono,
       tipoDeseado: tipoDeseado,
     );
@@ -101,5 +109,15 @@ class LicenseController extends AsyncNotifier<LicenseCheck> {
   Future<void> revalidar() async {
     state = const AsyncLoading();
     state = AsyncData(await _repo.verificarAlArranque());
+  }
+
+  /// Botón «Renovar» del perfil (F18): genera la solicitud de pago.
+  /// Devuelve (mensajeDeConfirmacion, fallo).
+  Future<(String?, Failure?)> renovar() async {
+    final result = await _repo.solicitarRenovacion();
+    return result.when(
+      ok: (mensaje) => (mensaje, null),
+      fail: (failure) => (null, failure),
+    );
   }
 }

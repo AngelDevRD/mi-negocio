@@ -24,7 +24,16 @@ abstract class Licencia with _$Licencia {
   /// (testeable), no contra `DateTime.now()`.
   bool vencidaEn(DateTime momento) =>
       fechaVencimiento != null && momento.isAfter(fechaVencimiento!);
+
+  /// Días restantes hasta el vencimiento (F18: alertas de renovación).
+  /// `null` si la licencia no tiene fecha de vencimiento.
+  int? diasParaVencer(DateTime momento) =>
+      fechaVencimiento?.difference(momento).inDays;
 }
+
+/// F18: días antes del vencimiento desde los que se muestra la alerta de
+/// renovación (banner del dashboard + notificación local).
+const int diasAlertaRenovacion = 7;
 
 /// Resultado de la verificación de licencia al arranque (RF-LIC-04/05).
 sealed class LicenseCheck {

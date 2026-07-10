@@ -26,26 +26,27 @@ void main() {
     expect(find.text('Comenzar prueba gratis'), findsOneWidget);
   });
 
-  testWidgets('activar la demo lleva al home con licencia activa', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWith((ref) {
-            final db = AppDatabase.forTesting(NativeDatabase.memory());
-            ref.onDispose(db.close);
-            return db;
-          }),
-        ],
-        child: const AppGestion(),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'activar la demo sin negocio registrado lleva a la configuración inicial',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWith((ref) {
+              final db = AppDatabase.forTesting(NativeDatabase.memory());
+              ref.onDispose(db.close);
+              return db;
+            }),
+          ],
+          child: const AppGestion(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Comenzar prueba gratis'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Comenzar prueba gratis'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Licencia activa'), findsOneWidget);
-  });
+      expect(find.text('Configuración inicial'), findsOneWidget);
+    },
+  );
 }

@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Requerido para todas las llamadas de red (Supabase, sync) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Foto de factura (F9): captura con la cámara -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Alertas de vencimiento de suscripción (F18): notificaciones locales -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="app_gestion"
+        android:label="Mi Negocio 360"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

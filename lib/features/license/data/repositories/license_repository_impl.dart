@@ -195,13 +195,12 @@ class LicenseRepositoryImpl implements LicenseRepository {
   @override
   Future<Result<String>> solicitarLicencia({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String tipoDeseado,
   }) async {
-    if (nombreNegocio.trim().isEmpty || emailAdmin.trim().isEmpty) {
+    if (nombreNegocio.trim().isEmpty) {
       return const Result.fail(
-        ValidationFailure('Nombre del negocio y email son obligatorios.'),
+        ValidationFailure('El nombre del negocio es obligatorio.'),
       );
     }
     if (!_remote.disponible) {
@@ -221,7 +220,6 @@ class LicenseRepositoryImpl implements LicenseRepository {
     try {
       final response = await _remote.solicitar(
         nombreNegocio: nombreNegocio.trim(),
-        emailAdmin: emailAdmin.trim(),
         telefono: telefono?.trim(),
         deviceId: await _deviceId(),
         tipoDeseado: tipoDeseado,
@@ -241,5 +239,48 @@ class LicenseRepositoryImpl implements LicenseRepository {
   Future<Result<void>> desactivar() async {
     await _local.eliminar();
     return const Result.ok(null);
+  }
+
+  @override
+  Future<Result<String>> solicitarRenovacion() async {
+    final cache = await _local.obtener();
+    if (cache == null || cache.clave == null) {
+      return const Result.fail(
+        LicenseFailure(
+          'Solo las licencias Local o Nube pueden renovarse. '
+          'La Demo no requiere renovación.',
+        ),
+      );
+    }
+    if (!_remote.disponible) {
+      return const Result.fail(
+        NetworkFailure(
+          'El servidor de licencias no está configurado en esta versión.',
+        ),
+      );
+    }
+    if (!await _isOnline()) {
+      return const Result.fail(
+        NetworkFailure(
+          'Se necesita conexión a internet para solicitar la renovación.',
+        ),
+      );
+    }
+    try {
+      final response = await _remote.renovar(
+        clave: cache.clave!,
+        deviceId: cache.deviceId,
+      );
+      if (!response.ok) {
+        return Result.fail(
+          LicenseFailure(
+            response.error ?? 'No se pudo enviar la solicitud de renovación.',
+          ),
+        );
+      }
+      return Result.ok(response.mensaje ?? 'Solicitud de renovación enviada.');
+    } catch (e) {
+      return Result.fail(NetworkFailure('Error de conexión al renovar: $e'));
+    }
   }
 }

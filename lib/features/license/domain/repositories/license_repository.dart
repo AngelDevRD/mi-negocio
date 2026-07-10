@@ -17,11 +17,15 @@ abstract class LicenseRepository {
   /// Devuelve el mensaje de confirmación.
   Future<Result<String>> solicitarLicencia({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String tipoDeseado,
   });
 
   /// Desactiva la licencia en este dispositivo (libera el device).
   Future<Result<void>> desactivar();
+
+  /// Solicita la renovación de la suscripción (F18): genera una solicitud
+  /// de pago que el propietario confirma desde el panel (F4). Devuelve el
+  /// mensaje de confirmación.
+  Future<Result<String>> solicitarRenovacion();
 }

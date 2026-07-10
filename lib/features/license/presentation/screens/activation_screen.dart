@@ -142,7 +142,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                   TextButton(
                     onPressed: _procesando
                         ? null
-                        : () => _RequestLicenseSheet.mostrar(context, ref),
+                        : () => RequestLicenseSheet.mostrar(context, ref),
                     child: const Text('¿No tienes licencia? Solicítala aquí'),
                   ),
                   if (_procesando) ...[
@@ -160,27 +160,26 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
 }
 
 /// Formulario de solicitud de licencia (RF-LIC-07).
-class _RequestLicenseSheet extends ConsumerStatefulWidget {
-  const _RequestLicenseSheet();
+class RequestLicenseSheet extends ConsumerStatefulWidget {
+  const RequestLicenseSheet({super.key});
 
   static void mostrar(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const _RequestLicenseSheet(),
+      builder: (_) => const RequestLicenseSheet(),
     );
   }
 
   @override
-  ConsumerState<_RequestLicenseSheet> createState() =>
-      _RequestLicenseSheetState();
+  ConsumerState<RequestLicenseSheet> createState() =>
+      RequestLicenseSheetState();
 }
 
-class _RequestLicenseSheetState extends ConsumerState<_RequestLicenseSheet> {
+class RequestLicenseSheetState extends ConsumerState<RequestLicenseSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _telefonoController = TextEditingController();
-  final _emailController = TextEditingController();
   String _tipoDeseado = 'local';
   bool _enviando = false;
 
@@ -188,7 +187,6 @@ class _RequestLicenseSheetState extends ConsumerState<_RequestLicenseSheet> {
   void dispose() {
     _nombreController.dispose();
     _telefonoController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -199,7 +197,6 @@ class _RequestLicenseSheetState extends ConsumerState<_RequestLicenseSheet> {
         .read(licenseControllerProvider.notifier)
         .solicitar(
           nombreNegocio: _nombreController.text,
-          emailAdmin: _emailController.text,
           telefono: _telefonoController.text.isEmpty
               ? null
               : _telefonoController.text,
@@ -245,16 +242,6 @@ class _RequestLicenseSheetState extends ConsumerState<_RequestLicenseSheet> {
               ),
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email del administrador',
-              ),
-              keyboardType: TextInputType.emailAddress,
-              validator: (v) =>
-                  (v == null || !v.contains('@')) ? 'Email inválido' : null,
             ),
             const SizedBox(height: AppSpacing.sm),
             TextFormField(

@@ -39,12 +39,26 @@ class FakeRemote implements LicenseRemoteDatasource {
   @override
   Future<RemoteLicenseResponse> solicitar({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String deviceId,
     required String tipoDeseado,
   }) async {
     return const RemoteLicenseResponse(ok: true, mensaje: 'Solicitud enviada.');
+  }
+
+  RemoteLicenseResponse? respuestaRenovar;
+
+  @override
+  Future<RemoteLicenseResponse> renovar({
+    required String clave,
+    required String deviceId,
+  }) async {
+    if (lanzarErrorDeRed) throw Exception('sin red');
+    return respuestaRenovar ??
+        const RemoteLicenseResponse(
+          ok: true,
+          mensaje: 'Solicitud de renovación enviada.',
+        );
   }
 }
 
@@ -236,6 +250,57 @@ void main() {
 
       expect(result.isOk, isFalse);
       expect((result as Fail).failure.message, contains('no está configurado'));
+    });
+  });
+
+  group('Renovación (F18)', () {
+    test('demo no puede renovarse', () async {
+      await crearRepo().activarDemo();
+
+      final result = await crearRepo().solicitarRenovacion();
+
+      expect(result.isOk, isFalse);
+      expect((result as Fail).failure, isA<LicenseFailure>());
+    });
+
+    test('licencia Local/Nube envía solicitud de renovación', () async {
+      await local.guardar(
+        Licencia(
+          tipo: TipoLicencia.local,
+          estado: EstadoLicencia.activa,
+          clave: 'CLAVE-1',
+          deviceId: 'device-test-1',
+          fechaActivacion: DateTime.utc(2026),
+          fechaVencimiento: ahora.add(const Duration(days: 5)),
+          ultimaValidacion: ahora,
+        ),
+      );
+      online = true;
+
+      final result = await crearRepo().solicitarRenovacion();
+
+      expect(result.isOk, isTrue);
+      expect(result.valueOrNull, contains('renovación'));
+    });
+
+    test('sin internet la renovación falla con NetworkFailure', () async {
+      await local.guardar(
+        Licencia(
+          tipo: TipoLicencia.local,
+          estado: EstadoLicencia.activa,
+          clave: 'CLAVE-1',
+          deviceId: 'device-test-1',
+          fechaActivacion: DateTime.utc(2026),
+          fechaVencimiento: ahora.add(const Duration(days: 5)),
+          ultimaValidacion: ahora,
+        ),
+      );
+      online = false;
+
+      final result = await crearRepo().solicitarRenovacion();
+
+      expect(result.isOk, isFalse);
+      expect((result as Fail).failure, isA<NetworkFailure>());
     });
   });
 }

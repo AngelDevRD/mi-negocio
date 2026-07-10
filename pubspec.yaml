@@ -32,10 +32,35 @@ dependencies:
   intl: ^0.20.2
   path_provider: ^2.1.5
 
+  # Compras (F9): foto de factura
+  image_picker: ^1.1.2
+
+  # Análisis financiero (F15): gráficas
+  fl_chart: ^1.0.0
+
+  # Exportaciones (F16): Excel, PDF, CSV y compartir
+  excel: ^4.0.6
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  csv: ^6.0.0
+  share_plus: ^10.1.4
+
   # Licencias (F3): backend Supabase + identidad del dispositivo + conectividad
   supabase_flutter: ^2.8.0
   device_info_plus: ^11.0.0
   connectivity_plus: ^6.1.0
+
+  # Autenticación local (F5): hash de contraseñas y sesión persistida
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
+
+  # Respaldo y restauración (F17): ZIP + JSON, selector de archivos y versión de app
+  archive: ^3.6.1
+  file_picker: ^11.0.2
+  package_info_plus: ^9.0.1
+
+  # Perfil y suscripciones (F18): alertas de vencimiento
+  flutter_local_notifications: ^19.4.2
 
 dev_dependencies:
   flutter_test:
@@ -53,5 +78,13 @@ dev_dependencies:
   custom_lint: ^0.8.0
   riverpod_lint: ^3.0.0
 
+  # Icono de la app
+  flutter_launcher_icons: ^0.14.4
+
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"

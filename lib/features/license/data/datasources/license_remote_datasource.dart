@@ -85,10 +85,16 @@ abstract class LicenseRemoteDatasource {
 
   Future<RemoteLicenseResponse> solicitar({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String deviceId,
     required String tipoDeseado,
+  });
+
+  /// Solicita la renovación de la licencia activa (RF-LIC, F18): genera una
+  /// solicitud de pago que el propietario confirma desde el panel (F4).
+  Future<RemoteLicenseResponse> renovar({
+    required String clave,
+    required String deviceId,
   });
 }
 
@@ -127,7 +133,6 @@ class SupabaseLicenseRemoteDatasource implements LicenseRemoteDatasource {
   @override
   Future<RemoteLicenseResponse> solicitar({
     required String nombreNegocio,
-    required String emailAdmin,
     String? telefono,
     required String deviceId,
     required String tipoDeseado,
@@ -135,10 +140,17 @@ class SupabaseLicenseRemoteDatasource implements LicenseRemoteDatasource {
     return _invoke({
       'action': 'solicitar',
       'nombreNegocio': nombreNegocio,
-      'emailAdmin': emailAdmin,
       'telefono': telefono,
       'deviceId': deviceId,
       'tipoDeseado': tipoDeseado,
     });
+  }
+
+  @override
+  Future<RemoteLicenseResponse> renovar({
+    required String clave,
+    required String deviceId,
+  }) {
+    return _invoke({'action': 'renovar', 'clave': clave, 'deviceId': deviceId});
   }
 }
