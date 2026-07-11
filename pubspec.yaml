@@ -59,6 +59,11 @@ dependencies:
   file_picker: ^11.0.2
   package_info_plus: ^9.0.1
 
+  # Actualizador in-app
+  http: ^1.2.0
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.0
+
   # Perfil y suscripciones (F18): alertas de vencimiento
   flutter_local_notifications: ^19.4.2
 
