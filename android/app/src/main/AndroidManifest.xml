@@ -7,7 +7,7 @@
     <!-- Alertas de vencimiento de suscripción (F18): notificaciones locales -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="Mi Negocio 360"
+        android:label="MiTienda 360"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
