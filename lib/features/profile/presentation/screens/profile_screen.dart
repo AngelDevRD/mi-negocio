@@ -302,12 +302,14 @@ class _LogoPicker extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              OutlinedButton.icon(
-                onPressed: onTomarFoto,
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: const Text('Tomar foto'),
-              ),
-              const SizedBox(width: AppSpacing.sm),
+              if (Platform.isAndroid || Platform.isIOS)
+                OutlinedButton.icon(
+                  onPressed: onTomarFoto,
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Tomar foto'),
+                ),
+              if (Platform.isAndroid || Platform.isIOS)
+                const SizedBox(width: AppSpacing.sm),
               OutlinedButton.icon(
                 onPressed: onElegirGaleria,
                 icon: const Icon(Icons.photo_library_outlined),

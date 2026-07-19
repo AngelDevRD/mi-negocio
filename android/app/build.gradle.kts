@@ -27,11 +27,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            // Codemagic inyecta estas variables via `android_signing` (ver codemagic.yaml).
+            // Sin ellas, cae a la firma debug para que `flutter build apk` local siga
+            // funcionando sin credenciales.
+            val keystorePath = System.getenv("CM_KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("CM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CM_KEY_ALIAS")
+                keyPassword = System.getenv("CM_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("CM_KEYSTORE_PATH") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

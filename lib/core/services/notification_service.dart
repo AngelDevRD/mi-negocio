@@ -16,6 +16,13 @@ class NotificationService {
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
+      macOS: DarwinInitializationSettings(),
+      linux: LinuxInitializationSettings(defaultActionName: 'Abrir'),
+      windows: WindowsInitializationSettings(
+        appName: 'MiTienda 360',
+        appUserModelId: 'com.angeldevrd.appgestion',
+        guid: 'a6e8f1c2-9b3d-4f7a-8e1c-2d4b6a9f0c3e',
+      ),
     );
     await _plugin.initialize(settings);
     await _plugin

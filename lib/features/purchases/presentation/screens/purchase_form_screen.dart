@@ -311,14 +311,16 @@ class _FotoFacturaPicker extends StatelessWidget {
         else
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onTomarFoto,
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Tomar foto'),
+              if (Platform.isAndroid || Platform.isIOS)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onTomarFoto,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: const Text('Tomar foto'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
+              if (Platform.isAndroid || Platform.isIOS)
+                const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onElegirGaleria,

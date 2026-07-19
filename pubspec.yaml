@@ -62,6 +62,11 @@ dependencies:
   # Perfil y suscripciones (F18): alertas de vencimiento
   flutter_local_notifications: ^19.4.2
 
+  # Actualizador propio (in-app updater vía backend del portafolio)
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
