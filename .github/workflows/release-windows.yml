@@ -13,7 +13,11 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    # windows-latest ya trae MSVC 14.51 (VS 2026), que elimino los headers
+    # <experimental/coroutine> que usan plugins nativos como
+    # flutter_local_notifications_windows -- windows-2022 todavia trae el
+    # toolchain compatible.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
