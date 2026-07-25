@@ -4,6 +4,10 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/operacion_payloads.dart';
+import '../../../../core/sync/payloads/producto_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 import '../../../inventory/data/datasources/inventory_local_datasource.dart';
 
 /// Ítem de entrada para [PurchasesLocalDatasource.registrarCompra].
@@ -56,9 +60,17 @@ class PurchasesLocalDatasource {
             telefono: Value(telefono),
           ),
         );
-    return (_db.select(
+    final fila = await (_db.select(
       _db.proveedores,
     )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'proveedores',
+      registroId: id,
+      operacion: OperacionSync.insert,
+      payload: proveedorPayload(fila),
+    );
+    return fila;
   }
 
   // ---------------------------------------------------------------------
@@ -195,18 +207,40 @@ class PurchasesLocalDatasource {
               fecha: DateTime.now().toUtc(),
             ),
           );
+      final compraFila = await (_db.select(
+        _db.compras,
+      )..where((t) => t.id.equals(compraId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'compras',
+        registroId: compraId,
+        operacion: OperacionSync.insert,
+        payload: compraPayload(compraFila),
+      );
 
       for (final item in items) {
+        final itemId = generateUuidV4();
         await _db
             .into(_db.compraItems)
             .insert(
               CompraItemsCompanion.insert(
+                id: Value(itemId),
                 compraId: compraId,
                 productoId: item.productoId,
                 cantidad: item.cantidad,
                 costoUnitario: item.costoUnitarioCents,
               ),
             );
+        final itemFila = await (_db.select(
+          _db.compraItems,
+        )..where((t) => t.id.equals(itemId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'compra_items',
+          registroId: itemId,
+          operacion: OperacionSync.insert,
+          payload: compraItemPayload(itemFila),
+        );
 
         final producto = await inventory.obtenerProducto(item.productoId);
         if (producto == null) continue;
@@ -220,10 +254,12 @@ class PurchasesLocalDatasource {
         );
 
         if (item.costoUnitarioCents != producto.precioCompra) {
+          final histId = generateUuidV4();
           await _db
               .into(_db.historialPrecios)
               .insert(
                 HistorialPreciosCompanion.insert(
+                  id: Value(histId),
                   productoId: item.productoId,
                   tipo: TipoPrecio.compra,
                   precioAnterior: producto.precioCompra,
@@ -231,6 +267,17 @@ class PurchasesLocalDatasource {
                   usuarioId: usuarioId,
                 ),
               );
+          final histFila = await (_db.select(
+            _db.historialPrecios,
+          )..where((t) => t.id.equals(histId))).getSingle();
+          await enqueueSync(
+            _db,
+            tabla: 'historial_precios',
+            registroId: histId,
+            operacion: OperacionSync.insert,
+            payload: historialPrecioPayload(histFila),
+          );
+
           await (_db.update(
             _db.productos,
           )..where((t) => t.id.equals(item.productoId))).write(
@@ -239,13 +286,25 @@ class PurchasesLocalDatasource {
               updatedAt: Value(DateTime.now().toUtc()),
             ),
           );
+          final productoFila = await (_db.select(
+            _db.productos,
+          )..where((t) => t.id.equals(item.productoId))).getSingle();
+          await enqueueSync(
+            _db,
+            tabla: 'productos',
+            registroId: item.productoId,
+            operacion: OperacionSync.update,
+            payload: productoPayload(productoFila),
+          );
         }
       }
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'crear',
               modulo: 'compras',
@@ -260,12 +319,24 @@ class PurchasesLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
 
       if (cajaSesionId != null) {
+        final movId = generateUuidV4();
         await _db
             .into(_db.cajaMovimientos)
             .insert(
               CajaMovimientosCompanion.insert(
+                id: Value(movId),
                 cajaSesionId: cajaSesionId,
                 tipo: TipoCajaMovimiento.compra,
                 monto: -total,
@@ -273,6 +344,16 @@ class PurchasesLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final movFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(movId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: movId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(movFila),
+        );
       }
 
       return compraId;

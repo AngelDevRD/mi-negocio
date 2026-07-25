@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/producto_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 
 /// Acceso a `productos` (existencias) y `movimientos_inventario` (kárdex)
 /// para el módulo de inventario (RF-INV).
@@ -107,11 +111,23 @@ class InventoryLocalDatasource {
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
+      final productoFila = await (_db.select(
+        _db.productos,
+      )..where((t) => t.id.equals(producto.id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'productos',
+        registroId: producto.id,
+        operacion: OperacionSync.update,
+        payload: productoPayload(productoFila),
+      );
 
+      final movId = generateUuidV4();
       await _db
           .into(_db.movimientosInventario)
           .insert(
             MovimientosInventarioCompanion.insert(
+              id: Value(movId),
               productoId: producto.id,
               tipo: tipo,
               cantidad: cantidad,
@@ -121,11 +137,23 @@ class InventoryLocalDatasource {
               referenciaId: Value(referenciaId),
             ),
           );
+      final movFila = await (_db.select(
+        _db.movimientosInventario,
+      )..where((t) => t.id.equals(movId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'movimientos_inventario',
+        registroId: movId,
+        operacion: OperacionSync.insert,
+        payload: movimientoInventarioPayload(movFila),
+      );
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: tipo.name,
               modulo: 'inventario',
@@ -140,6 +168,16 @@ class InventoryLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
     });
   }
 }

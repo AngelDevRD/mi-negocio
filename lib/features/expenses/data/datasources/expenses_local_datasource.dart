@@ -4,6 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/operacion_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 
 /// Acceso a `gastos` (RF-GAS): listado con filtros y registro.
 class ExpensesLocalDatasource {
@@ -76,11 +79,23 @@ class ExpensesLocalDatasource {
               usuarioId: usuarioId,
             ),
           );
+      final gastoFila = await (_db.select(
+        _db.gastos,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'gastos',
+        registroId: id,
+        operacion: OperacionSync.insert,
+        payload: gastoPayload(gastoFila),
+      );
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'crear',
               modulo: 'gastos',
@@ -95,12 +110,24 @@ class ExpensesLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
 
       if (cajaSesionId != null) {
+        final movId = generateUuidV4();
         await _db
             .into(_db.cajaMovimientos)
             .insert(
               CajaMovimientosCompanion.insert(
+                id: Value(movId),
                 cajaSesionId: cajaSesionId,
                 tipo: TipoCajaMovimiento.gasto,
                 monto: -montoCents,
@@ -108,6 +135,16 @@ class ExpensesLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final movFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(movId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: movId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(movFila),
+        );
       }
 
       return id;

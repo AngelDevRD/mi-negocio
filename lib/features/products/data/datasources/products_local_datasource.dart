@@ -4,6 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/producto_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 
 /// Acceso a las tablas `categorias`, `productos`, `historial_precios` y
 /// `movimientos_inventario` (RF-PROD).
@@ -37,24 +40,52 @@ class ProductsLocalDatasource {
     await _db
         .into(_db.categorias)
         .insert(CategoriasCompanion.insert(id: Value(id), nombre: nombre));
-    return (_db.select(
+    final fila = await (_db.select(
       _db.categorias,
     )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'categorias',
+      registroId: id,
+      operacion: OperacionSync.insert,
+      payload: categoriaPayload(fila),
+    );
+    return fila;
   }
 
-  Future<void> renombrarCategoria(String id, String nombre) {
-    return (_db.update(_db.categorias)..where((t) => t.id.equals(id))).write(
+  Future<void> renombrarCategoria(String id, String nombre) async {
+    await (_db.update(_db.categorias)..where((t) => t.id.equals(id))).write(
       CategoriasCompanion(
         nombre: Value(nombre),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
+    final fila = await (_db.select(
+      _db.categorias,
+    )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'categorias',
+      registroId: id,
+      operacion: OperacionSync.update,
+      payload: categoriaPayload(fila),
+    );
   }
 
-  Future<void> eliminarCategoria(String id) {
+  Future<void> eliminarCategoria(String id) async {
     final ahora = DateTime.now().toUtc();
-    return (_db.update(_db.categorias)..where((t) => t.id.equals(id))).write(
+    await (_db.update(_db.categorias)..where((t) => t.id.equals(id))).write(
       CategoriasCompanion(deletedAt: Value(ahora), updatedAt: Value(ahora)),
+    );
+    final fila = await (_db.select(
+      _db.categorias,
+    )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'categorias',
+      registroId: id,
+      operacion: OperacionSync.update,
+      payload: categoriaPayload(fila),
     );
   }
 
@@ -152,10 +183,12 @@ class ProductsLocalDatasource {
           );
 
       if (stockInicial != 0) {
+        final movId = generateUuidV4();
         await _db
             .into(_db.movimientosInventario)
             .insert(
               MovimientosInventarioCompanion.insert(
+                id: Value(movId),
                 productoId: id,
                 tipo: TipoMovimientoInventario.stockInicial,
                 cantidad: stockInicial,
@@ -164,7 +197,28 @@ class ProductsLocalDatasource {
                 motivo: const Value('Stock inicial'),
               ),
             );
+        final movFila = await (_db.select(
+          _db.movimientosInventario,
+        )..where((t) => t.id.equals(movId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'movimientos_inventario',
+          registroId: movId,
+          operacion: OperacionSync.insert,
+          payload: movimientoInventarioPayload(movFila),
+        );
       }
+
+      final productoFila = await (_db.select(
+        _db.productos,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'productos',
+        registroId: id,
+        operacion: OperacionSync.insert,
+        payload: productoPayload(productoFila),
+      );
 
       await _registrarAuditoria(
         usuarioId: usuarioId,
@@ -201,10 +255,12 @@ class ProductsLocalDatasource {
   }) {
     return _db.transaction(() async {
       if (actual.precioCompra != precioCompra) {
+        final histId = generateUuidV4();
         await _db
             .into(_db.historialPrecios)
             .insert(
               HistorialPreciosCompanion.insert(
+                id: Value(histId),
                 productoId: id,
                 tipo: TipoPrecio.compra,
                 precioAnterior: actual.precioCompra,
@@ -212,12 +268,24 @@ class ProductsLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final histFila = await (_db.select(
+          _db.historialPrecios,
+        )..where((t) => t.id.equals(histId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'historial_precios',
+          registroId: histId,
+          operacion: OperacionSync.insert,
+          payload: historialPrecioPayload(histFila),
+        );
       }
       if (actual.precioVenta != precioVenta) {
+        final histId = generateUuidV4();
         await _db
             .into(_db.historialPrecios)
             .insert(
               HistorialPreciosCompanion.insert(
+                id: Value(histId),
                 productoId: id,
                 tipo: TipoPrecio.venta,
                 precioAnterior: actual.precioVenta,
@@ -225,6 +293,16 @@ class ProductsLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final histFila = await (_db.select(
+          _db.historialPrecios,
+        )..where((t) => t.id.equals(histId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'historial_precios',
+          registroId: histId,
+          operacion: OperacionSync.insert,
+          payload: historialPrecioPayload(histFila),
+        );
       }
 
       await (_db.update(_db.productos)..where((t) => t.id.equals(id))).write(
@@ -237,6 +315,16 @@ class ProductsLocalDatasource {
           stockMinimo: Value(stockMinimo),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
+      );
+      final productoFila = await (_db.select(
+        _db.productos,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'productos',
+        registroId: id,
+        operacion: OperacionSync.update,
+        payload: productoPayload(productoFila),
       );
 
       await _registrarAuditoria(
@@ -274,6 +362,16 @@ class ProductsLocalDatasource {
           activo: Value(activo),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
+      );
+      final productoFila = await (_db.select(
+        _db.productos,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'productos',
+        registroId: id,
+        operacion: OperacionSync.update,
+        payload: productoPayload(productoFila),
       );
       await _registrarAuditoria(
         usuarioId: usuarioId,
@@ -322,11 +420,13 @@ class ProductsLocalDatasource {
     required String entidadId,
     Map<String, Object?>? datosAntes,
     Map<String, Object?>? datosDespues,
-  }) {
-    return _db
+  }) async {
+    final id = generateUuidV4();
+    await _db
         .into(_db.auditoria)
         .insert(
           AuditoriaCompanion.insert(
+            id: Value(id),
             usuarioId: usuarioId,
             accion: accion,
             modulo: 'productos',
@@ -339,5 +439,15 @@ class ProductsLocalDatasource {
             ),
           ),
         );
+    final fila = await (_db.select(
+      _db.auditoria,
+    )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'auditoria',
+      registroId: id,
+      operacion: OperacionSync.insert,
+      payload: auditoriaPayload(fila),
+    );
   }
 }

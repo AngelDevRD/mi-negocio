@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/operacion_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 
 /// Acceso a `caja_sesiones`/`caja_movimientos` (RF-CAJ): sesión actual,
 /// historial y cierre de caja.
@@ -137,12 +141,24 @@ class CashRegisterLocalDatasource {
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
+      final cajaFila = await (_db.select(
+        _db.cajaSesiones,
+      )..where((t) => t.id.equals(sesionId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'caja_sesiones',
+        registroId: sesionId,
+        operacion: OperacionSync.update,
+        payload: cajaSesionPayload(cajaFila),
+      );
 
       if (retiro != 0) {
+        final movId = generateUuidV4();
         await _db
             .into(_db.cajaMovimientos)
             .insert(
               CajaMovimientosCompanion.insert(
+                id: Value(movId),
                 cajaSesionId: sesionId,
                 tipo: TipoCajaMovimiento.retiroCierre,
                 monto: -retiro,
@@ -150,12 +166,24 @@ class CashRegisterLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final movFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(movId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: movId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(movFila),
+        );
       }
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'cerrar',
               modulo: 'caja',
@@ -172,6 +200,16 @@ class CashRegisterLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
     });
   }
 }

@@ -4,6 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/operacion_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 import '../../../inventory/data/datasources/inventory_local_datasource.dart';
 
 /// Ítem de entrada para [SalesLocalDatasource.registrarVenta].
@@ -145,12 +148,24 @@ class SalesLocalDatasource {
               fecha: DateTime.now().toUtc(),
             ),
           );
+      final ventaFila = await (_db.select(
+        _db.ventas,
+      )..where((t) => t.id.equals(ventaId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'ventas',
+        registroId: ventaId,
+        operacion: OperacionSync.insert,
+        payload: ventaPayload(ventaFila),
+      );
 
       for (final item in items) {
+        final itemId = generateUuidV4();
         await _db
             .into(_db.ventaItems)
             .insert(
               VentaItemsCompanion.insert(
+                id: Value(itemId),
                 ventaId: ventaId,
                 productoId: item.productoId,
                 cantidad: item.cantidad,
@@ -158,6 +173,16 @@ class SalesLocalDatasource {
                 costoUnitario: costos[item.productoId]!,
               ),
             );
+        final itemFila = await (_db.select(
+          _db.ventaItems,
+        )..where((t) => t.id.equals(itemId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'venta_items',
+          registroId: itemId,
+          operacion: OperacionSync.insert,
+          payload: ventaItemPayload(itemFila),
+        );
 
         final producto = await inventory.obtenerProducto(item.productoId);
         if (producto == null) continue;
@@ -171,10 +196,12 @@ class SalesLocalDatasource {
         );
       }
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'crear',
               modulo: 'ventas',
@@ -189,11 +216,23 @@ class SalesLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
 
+      final cajaMovId = generateUuidV4();
       await _db
           .into(_db.cajaMovimientos)
           .insert(
             CajaMovimientosCompanion.insert(
+              id: Value(cajaMovId),
               cajaSesionId: cajaSesionId,
               tipo: TipoCajaMovimiento.venta,
               monto: total,
@@ -201,6 +240,16 @@ class SalesLocalDatasource {
               usuarioId: usuarioId,
             ),
           );
+      final cajaMovFila = await (_db.select(
+        _db.cajaMovimientos,
+      )..where((t) => t.id.equals(cajaMovId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'caja_movimientos',
+        registroId: cajaMovId,
+        operacion: OperacionSync.insert,
+        payload: cajaMovimientoPayload(cajaMovFila),
+      );
 
       return ventaId;
     });
@@ -237,11 +286,23 @@ class SalesLocalDatasource {
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
+      final ventaFila = await (_db.select(
+        _db.ventas,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'ventas',
+        registroId: id,
+        operacion: OperacionSync.update,
+        payload: ventaPayload(ventaFila),
+      );
 
+      final cajaMovId = generateUuidV4();
       await _db
           .into(_db.cajaMovimientos)
           .insert(
             CajaMovimientosCompanion.insert(
+              id: Value(cajaMovId),
               cajaSesionId: venta.cajaSesionId,
               tipo: TipoCajaMovimiento.venta,
               monto: -venta.total,
@@ -249,11 +310,23 @@ class SalesLocalDatasource {
               usuarioId: usuarioId,
             ),
           );
+      final cajaMovFila = await (_db.select(
+        _db.cajaMovimientos,
+      )..where((t) => t.id.equals(cajaMovId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'caja_movimientos',
+        registroId: cajaMovId,
+        operacion: OperacionSync.insert,
+        payload: cajaMovimientoPayload(cajaMovFila),
+      );
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'anular',
               modulo: 'ventas',
@@ -264,6 +337,16 @@ class SalesLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
     });
   }
 
@@ -285,11 +368,23 @@ class SalesLocalDatasource {
               estado: EstadoCajaSesion.abierta,
             ),
           );
+      final cajaFila = await (_db.select(
+        _db.cajaSesiones,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'caja_sesiones',
+        registroId: id,
+        operacion: OperacionSync.insert,
+        payload: cajaSesionPayload(cajaFila),
+      );
 
+      final auditId = generateUuidV4();
       await _db
           .into(_db.auditoria)
           .insert(
             AuditoriaCompanion.insert(
+              id: Value(auditId),
               usuarioId: usuarioId,
               accion: 'abrir',
               modulo: 'caja',
@@ -299,6 +394,16 @@ class SalesLocalDatasource {
               ),
             ),
           );
+      final auditFila = await (_db.select(
+        _db.auditoria,
+      )..where((t) => t.id.equals(auditId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'auditoria',
+        registroId: auditId,
+        operacion: OperacionSync.insert,
+        payload: auditoriaPayload(auditFila),
+      );
     });
   }
 }

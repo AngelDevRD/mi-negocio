@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_updater.dart';
 import 'core/router/app_router.dart';
+import 'core/sync/sync_provider.dart';
 import 'core/theme/app_theme.dart';
 
 class AppGestion extends ConsumerWidget {
@@ -15,6 +16,8 @@ class AppGestion extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
+    // Mantiene vivo el SyncEngine mientras este widget exista (toda la app).
+    ref.watch(syncEngineProvider);
 
     if (!_updateChecked) {
       _updateChecked = true;

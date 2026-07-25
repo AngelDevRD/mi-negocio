@@ -4,6 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/payloads/auditoria_payload.dart';
+import '../../../../core/sync/payloads/operacion_payloads.dart';
+import '../../../../core/sync/sync_queue_writer.dart';
 
 /// Acceso a `empleados` y `pagos_empleados` (RF-EMP).
 class EmployeesLocalDatasource {
@@ -63,6 +66,16 @@ class EmployeesLocalDatasource {
               frecuenciaPago: Value(frecuenciaPago),
             ),
           );
+      final fila = await (_db.select(
+        _db.empleados,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'empleados',
+        registroId: id,
+        operacion: OperacionSync.insert,
+        payload: empleadoPayload(fila),
+      );
 
       await _registrarAuditoria(
         usuarioId: usuarioId,
@@ -108,6 +121,16 @@ class EmployeesLocalDatasource {
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
+      final fila = await (_db.select(
+        _db.empleados,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'empleados',
+        registroId: id,
+        operacion: OperacionSync.update,
+        payload: empleadoPayload(fila),
+      );
 
       await _registrarAuditoria(
         usuarioId: usuarioId,
@@ -134,6 +157,16 @@ class EmployeesLocalDatasource {
           activo: Value(activo),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
+      );
+      final fila = await (_db.select(
+        _db.empleados,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'empleados',
+        registroId: id,
+        operacion: OperacionSync.update,
+        payload: empleadoPayload(fila),
       );
 
       await _registrarAuditoria(
@@ -213,6 +246,16 @@ class EmployeesLocalDatasource {
               usuarioId: usuarioId,
             ),
           );
+      final pagoFila = await (_db.select(
+        _db.pagosEmpleados,
+      )..where((t) => t.id.equals(id))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'pagos_empleados',
+        registroId: id,
+        operacion: OperacionSync.insert,
+        payload: pagoEmpleadoPayload(pagoFila),
+      );
 
       await _registrarAuditoria(
         usuarioId: usuarioId,
@@ -227,10 +270,12 @@ class EmployeesLocalDatasource {
       );
 
       if (cajaSesionId != null) {
+        final movId = generateUuidV4();
         await _db
             .into(_db.cajaMovimientos)
             .insert(
               CajaMovimientosCompanion.insert(
+                id: Value(movId),
                 cajaSesionId: cajaSesionId,
                 tipo: TipoCajaMovimiento.pagoEmpleado,
                 monto: -montoCents,
@@ -238,6 +283,16 @@ class EmployeesLocalDatasource {
                 usuarioId: usuarioId,
               ),
             );
+        final movFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(movId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: movId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(movFila),
+        );
       }
 
       return id;
@@ -254,11 +309,13 @@ class EmployeesLocalDatasource {
     required String entidadId,
     Map<String, Object?>? datosAntes,
     Map<String, Object?>? datosDespues,
-  }) {
-    return _db
+  }) async {
+    final id = generateUuidV4();
+    await _db
         .into(_db.auditoria)
         .insert(
           AuditoriaCompanion.insert(
+            id: Value(id),
             usuarioId: usuarioId,
             accion: accion,
             modulo: 'empleados',
@@ -271,5 +328,15 @@ class EmployeesLocalDatasource {
             ),
           ),
         );
+    final fila = await (_db.select(
+      _db.auditoria,
+    )..where((t) => t.id.equals(id))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'auditoria',
+      registroId: id,
+      operacion: OperacionSync.insert,
+      payload: auditoriaPayload(fila),
+    );
   }
 }

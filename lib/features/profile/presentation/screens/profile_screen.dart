@@ -6,10 +6,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../../core/config/supabase_config.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
+import '../../../../core/sync/sync_settings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../cloud_sync/data/cloud_auth_repository.dart';
+import '../../../cloud_sync/presentation/cloud_login_screen.dart';
 import '../../../license/domain/entities/licencia.dart';
 import '../../../license/presentation/providers/license_providers.dart';
 import '../../../license/presentation/screens/activation_screen.dart';
@@ -41,6 +45,10 @@ class ProfileScreen extends ConsumerWidget {
               _PerfilForm(negocio: negocio),
               const SizedBox(height: AppSpacing.lg),
               const _SuscripcionCard(),
+              if (SupabaseConfig.configurado) ...[
+                const SizedBox(height: AppSpacing.lg),
+                const _SyncCard(),
+              ],
             ],
           );
         },
@@ -542,6 +550,78 @@ class _InfoRow extends StatelessWidget {
             ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Vinculación con Supabase (sync en la nube, opcional): login del
+/// propietario + frecuencia de sync. Los datos ya se guardan localmente sin
+/// esto -- solo activa la copia periodica.
+class _SyncCard extends ConsumerWidget {
+  const _SyncCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(cloudCurrentUserProvider);
+    final frequency = ref.watch(syncFrequencyProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Sincronización en la nube',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (user == null) ...[
+              Text(
+                'Tus datos ya se guardan en este dispositivo. Vincula una '
+                'cuenta para tener ademas una copia en la nube.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CloudLoginScreen()),
+                ),
+                icon: const Icon(Icons.cloud_outlined),
+                label: const Text('Vincular con la nube'),
+              ),
+            ] else ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.cloud_done_outlined),
+                title: Text(user.email ?? 'Cuenta vinculada'),
+                subtitle: const Text('Sync activo'),
+                trailing: TextButton(
+                  onPressed: () =>
+                      ref.read(cloudAuthRepositoryProvider).signOut(),
+                  child: const Text('Desvincular'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              DropdownButtonFormField<SyncFrequency>(
+                initialValue: frequency,
+                decoration: const InputDecoration(
+                  labelText: 'Frecuencia de sync',
+                  border: OutlineInputBorder(),
+                ),
+                items: SyncFrequency.values
+                    .map((f) => DropdownMenuItem(value: f, child: Text(f.label)))
+                    .toList(),
+                onChanged: (f) {
+                  if (f != null) {
+                    ref.read(syncFrequencyProvider.notifier).setFrequency(f);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
