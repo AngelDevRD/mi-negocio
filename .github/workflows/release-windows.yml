@@ -50,6 +50,11 @@ jobs:
           $version = (Get-Content pubspec.yaml | Select-String '^version:').ToString() -replace 'version:\s*', '' -replace '\+.*', ''
           echo "tag=v$($version.Trim())" >> $env:GITHUB_OUTPUT
 
+      - name: Verificar que la version es superior a la ultima publicada
+        run: node tools/verify-release-version.mjs --repo ${{ github.repository }} --new "${{ steps.tag.outputs.tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
