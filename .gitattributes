@@ -4,6 +4,3 @@ macos/** linguist-generated
 windows/** linguist-generated
 linux/** linguist-generated
 web/** linguist-generated
-supabase/** linguist-vendored
-tools/** linguist-vendored
-test_data/** linguist-vendored
