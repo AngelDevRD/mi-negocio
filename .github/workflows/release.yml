@@ -1,0 +1,137 @@
+name: Release
+
+# Reemplaza al workflow de codemagic.yaml (nunca conectada como app en
+# Codemagic, sin builds reales). Requiere los secrets SUPABASE_URL,
+# SUPABASE_ANON_KEY, ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD configurados en Settings > Secrets
+# and variables > Actions de este repo.
+#
+# Publicar una version es un solo gesto: pushear un tag v*.*.* . La version
+# dentro de la APK (build-name/build-number) se deriva del tag, no de
+# pubspec.yaml -- pubspec.yaml ya no es una fuente de verdad de version.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar que el tag es superior al ultimo release publicado
+        run: node tools/verify-release-version.mjs --repo ${{ github.repository }} --new "${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-android:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+
+      - run: flutter pub get
+
+      - run: flutter test
+
+      - name: Derivar version del tag
+        id: version
+        run: echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Restaurar keystore de firma release
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Falta ANDROID_KEYSTORE_BASE64. Sin keystore la APK se firma con la clave debug, que cambia en cada runner, y Android rechaza instalarla sobre la version ya instalada."
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > android/app/release.jks
+          cat > android/key.properties <<EOF
+          storeFile=release.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - name: Compilar APK (release)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build apk --release \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ github.run_number }} \
+            --dart-define=SUPABASE_URL=$SUPABASE_URL \
+            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+
+      - name: Renombrar artefacto
+        run: cp build/app/outputs/flutter-apk/app-release.apk mi-negocio-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: mi-negocio-android.apk
+
+  build-windows:
+    needs: verify-version
+    # windows-latest ya trae MSVC 14.51 (VS 2026), que elimino los headers
+    # <experimental/coroutine> que usan plugins nativos como
+    # flutter_local_notifications_windows -- windows-2022 todavia trae el
+    # toolchain compatible.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+
+      - run: flutter config --enable-windows-desktop
+
+      - run: flutter pub get
+
+      - name: Compilar Windows (release)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build windows --release `
+            --dart-define=SUPABASE_URL=$env:SUPABASE_URL `
+            --dart-define=SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY
+        shell: pwsh
+
+      - name: Empaquetar build de Windows
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath mi-negocio-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: mi-negocio-windows.zip
+
+  release:
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            android-apk/mi-negocio-android.apk
+            windows-zip/mi-negocio-windows.zip
