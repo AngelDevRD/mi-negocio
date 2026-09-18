@@ -30,6 +30,7 @@ import '../../features/license/domain/entities/licencia.dart';
 import '../../features/license/presentation/providers/license_providers.dart';
 import '../../features/license/presentation/screens/activation_screen.dart';
 import '../../features/license/presentation/screens/blocked_screen.dart';
+import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/products/presentation/screens/categorias_management_screen.dart';
 import '../../features/products/presentation/screens/product_detail_screen.dart';
 import '../../features/products/presentation/screens/product_form_screen.dart';
@@ -43,6 +44,7 @@ import '../../features/sales/presentation/screens/quick_sale_screen.dart';
 import '../../features/sales/presentation/screens/sale_detail_screen.dart';
 import '../../features/sales/presentation/screens/sales_list_screen.dart';
 import '../database/enums.dart';
+import '../widgets/app_shell.dart';
 
 /// Rutas nombradas de la aplicación.
 abstract final class AppRoutes {
@@ -76,6 +78,10 @@ abstract final class AppRoutes {
   static const String respaldo = '/respaldo';
   static const String perfil = '/perfil';
   static const String asistente = '/asistente';
+
+  /// Hub "Más": accesible para ambos roles (los módulos que lista aplican
+  /// sus propios permisos).
+  static const String mas = '/mas';
 }
 
 /// Rutas accesibles solo para el rol Administrador (RN-15, guard de rol).
@@ -191,13 +197,54 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.usuarios,
         builder: (context, state) => const UsersManagementScreen(),
       ),
-      GoRoute(
-        path: AppRoutes.home,
-        builder: (context, state) => const DashboardScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.productos,
-        builder: (context, state) => const ProductsListScreen(),
+      // Destinos principales: solo estas 5 rutas raíz viven dentro del shell
+      // (barra inferior / rail). Todas las demás son de nivel superior y se
+      // abren a pantalla completa por encima de la barra.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.home,
+                builder: (context, state) => const DashboardScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.ventas,
+                builder: (context, state) => const SalesListScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.caja,
+                builder: (context, state) => const CashRegisterScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.productos,
+                builder: (context, state) => const ProductsListScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.mas,
+                builder: (context, state) => const MoreScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.productosNuevo,
@@ -245,10 +292,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             PurchaseDetailScreen(compraId: state.pathParameters['id']!),
       ),
       GoRoute(
-        path: AppRoutes.ventas,
-        builder: (context, state) => const SalesListScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.ventaRapida,
         builder: (context, state) => const QuickSaleScreen(),
       ),
@@ -260,10 +303,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/ventas/:id',
         builder: (context, state) =>
             SaleDetailScreen(ventaId: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: AppRoutes.caja,
-        builder: (context, state) => const CashRegisterScreen(),
       ),
       GoRoute(
         path: AppRoutes.cajaCerrar,

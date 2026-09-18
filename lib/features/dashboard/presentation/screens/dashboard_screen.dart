@@ -27,120 +27,7 @@ class DashboardScreen extends ConsumerWidget {
     final esAdmin = usuario?.esAdministrador ?? false;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inicio'),
-        actions: [
-          IconButton(
-            tooltip: 'Productos',
-            icon: const Icon(Icons.inventory_2_outlined),
-            onPressed: () => context.push(AppRoutes.productos),
-          ),
-          IconButton(
-            tooltip: 'Inventario',
-            icon: const Icon(Icons.warehouse_outlined),
-            onPressed: () => context.push(AppRoutes.inventario),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Más opciones',
-            onSelected: (valor) {
-              if (valor == 'logout') {
-                ref.read(authControllerProvider.notifier).logout();
-              } else {
-                context.push(valor);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: AppRoutes.gastos,
-                child: ListTile(
-                  leading: Icon(Icons.receipt_long_outlined),
-                  title: Text('Gastos'),
-                ),
-              ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.empleados,
-                  child: ListTile(
-                    leading: Icon(Icons.badge_outlined),
-                    title: Text('Empleados'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.usuarios,
-                  child: ListTile(
-                    leading: Icon(Icons.people_outline),
-                    title: Text('Gestionar usuarios'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.analisis,
-                  child: ListTile(
-                    leading: Icon(Icons.bar_chart_outlined),
-                    title: Text('Análisis financiero'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.auditoria,
-                  child: ListTile(
-                    leading: Icon(Icons.history),
-                    title: Text('Auditoría'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.exportaciones,
-                  child: ListTile(
-                    leading: Icon(Icons.ios_share_outlined),
-                    title: Text('Exportaciones'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.importar,
-                  child: ListTile(
-                    leading: Icon(Icons.file_upload_outlined),
-                    title: Text('Importar datos'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.respaldo,
-                  child: ListTile(
-                    leading: Icon(Icons.backup_outlined),
-                    title: Text('Respaldo'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.perfil,
-                  child: ListTile(
-                    leading: Icon(Icons.storefront_outlined),
-                    title: Text('Perfil y suscripción'),
-                  ),
-                ),
-              if (esAdmin)
-                const PopupMenuItem(
-                  value: AppRoutes.asistente,
-                  child: ListTile(
-                    leading: Icon(Icons.smart_toy_outlined),
-                    title: Text('Asistente IA'),
-                  ),
-                ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Cerrar sesión'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Inicio')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
@@ -156,9 +43,9 @@ class DashboardScreen extends ConsumerWidget {
           const _CajaActualCard(),
           const SizedBox(height: AppSpacing.md),
           _AccesosRapidos(
-            onVender: () => context.push(AppRoutes.ventas),
+            onVender: () => context.go(AppRoutes.ventas),
             onComprar: () => context.push(AppRoutes.compras),
-            onCaja: () => context.push(AppRoutes.caja),
+            onCaja: () => context.go(AppRoutes.caja),
           ),
           const SizedBox(height: AppSpacing.md),
           GridView.count(
