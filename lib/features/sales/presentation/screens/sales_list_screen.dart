@@ -50,6 +50,9 @@ class SalesListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Ventas')),
       floatingActionButton: FloatingActionButton.extended(
+        // Sin Hero: las pestañas del shell siguen montadas y sus FAB
+        // compartirían la etiqueta por defecto al abrir una ruta encima.
+        heroTag: null,
         onPressed: () => _nuevaVenta(context),
         icon: const Icon(Icons.add),
         label: const Text('Nueva venta'),

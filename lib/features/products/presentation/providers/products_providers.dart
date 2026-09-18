@@ -77,6 +77,37 @@ final productosProvider = StreamProvider<List<Producto>>((ref) {
       );
 });
 
+/// Texto de búsqueda de la selección de productos al VENDER o COMPRAR
+/// (venta rápida, venta detallada, diálogo de compra).
+///
+/// Es independiente de [productosFiltroProvider] (el de la pestaña
+/// Productos, que sigue viva en el shell): así escribir aquí no filtra la
+/// lista de Productos ni viceversa. `autoDispose`: se descarta solo cuando
+/// la pantalla/diálogo que lo observa se cierra, sin código en `dispose()`.
+final busquedaSeleccionProductoProvider =
+    NotifierProvider.autoDispose<BusquedaSeleccionProductoController, String>(
+      BusquedaSeleccionProductoController.new,
+    );
+
+class BusquedaSeleccionProductoController extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void actualizar(String texto) => state = texto;
+}
+
+/// Productos ofrecidos al vender/comprar: SOLO activos (un producto inactivo
+/// no se vende ni se compra), filtrados por
+/// [busquedaSeleccionProductoProvider]. No depende del filtro de categoría
+/// ni de "activos/inactivos" de la pestaña Productos.
+final productosParaSeleccionProvider =
+    StreamProvider.autoDispose<List<Producto>>((ref) {
+      final busqueda = ref.watch(busquedaSeleccionProductoProvider);
+      return ref
+          .watch(productsRepositoryProvider)
+          .watchProductos(busqueda: busqueda, activo: true);
+    });
+
 final productoProvider = FutureProvider.autoDispose.family<Producto?, String>((
   ref,
   id,

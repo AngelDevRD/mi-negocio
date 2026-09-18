@@ -452,9 +452,6 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
 
   @override
   void dispose() {
-    ref
-        .read(productosFiltroProvider.notifier)
-        .actualizar((f) => f.copyWith(busqueda: ''));
     _busquedaController.dispose();
     _cantidadController.dispose();
     _costoController.dispose();
@@ -484,7 +481,7 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final productosAsync = ref.watch(productosProvider);
+    final productosAsync = ref.watch(productosParaSeleccionProvider);
 
     return AlertDialog(
       title: const Text('Agregar producto'),
@@ -504,8 +501,8 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (texto) => ref
-                      .read(productosFiltroProvider.notifier)
-                      .actualizar((f) => f.copyWith(busqueda: texto)),
+                      .read(busquedaSeleccionProductoProvider.notifier)
+                      .actualizar(texto),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 SizedBox(

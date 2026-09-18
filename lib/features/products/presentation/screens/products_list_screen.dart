@@ -31,6 +31,9 @@ class ProductsListScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        // Sin Hero: las pestañas del shell siguen montadas y sus FAB
+        // compartirían la etiqueta por defecto al abrir una ruta encima.
+        heroTag: null,
         onPressed: () => context.push(AppRoutes.productosNuevo),
         icon: const Icon(Icons.add),
         label: const Text('Producto'),

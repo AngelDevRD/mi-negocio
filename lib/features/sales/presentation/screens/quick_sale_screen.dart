@@ -27,9 +27,6 @@ class _QuickSaleScreenState extends ConsumerState<QuickSaleScreen> {
 
   @override
   void dispose() {
-    ref
-        .read(productosFiltroProvider.notifier)
-        .actualizar((f) => f.copyWith(busqueda: ''));
     _busquedaController.dispose();
     super.dispose();
   }
@@ -87,7 +84,7 @@ class _QuickSaleScreenState extends ConsumerState<QuickSaleScreen> {
   Widget build(BuildContext context) {
     final cajaAsync = ref.watch(cajaActualProvider);
     final carrito = ref.watch(ventaRapidaCarritoProvider);
-    final productosAsync = ref.watch(productosProvider);
+    final productosAsync = ref.watch(productosParaSeleccionProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Venta rápida')),
@@ -112,8 +109,8 @@ class _QuickSaleScreenState extends ConsumerState<QuickSaleScreen> {
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (texto) => ref
-                      .read(productosFiltroProvider.notifier)
-                      .actualizar((f) => f.copyWith(busqueda: texto)),
+                      .read(busquedaSeleccionProductoProvider.notifier)
+                      .actualizar(texto),
                 ),
               ),
               Expanded(
