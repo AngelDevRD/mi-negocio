@@ -97,6 +97,11 @@ class _Catalogo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final productosAsync = ref.watch(productosParaSeleccionProvider);
     final busqueda = ref.watch(busquedaSeleccionProductoProvider);
+    final enCarrito = <String, double>{};
+    for (final item in ref.watch(carritoVentaProvider).items) {
+      enCarrito[item.productoId] =
+          (enCarrito[item.productoId] ?? 0) + item.cantidad;
+    }
 
     return Column(
       children: [
@@ -173,6 +178,7 @@ class _Catalogo extends ConsumerWidget {
                   final producto = productos[i];
                   return ProductoPosTile(
                     producto: producto,
+                    enCarrito: enCarrito[producto.id] ?? 0,
                     onTap: () =>
                         agregarProductoAlCarrito(context, ref, producto),
                   );

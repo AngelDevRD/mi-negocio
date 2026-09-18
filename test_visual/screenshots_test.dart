@@ -174,8 +174,23 @@ void main() {
         await sesion.ir('/ventas/rapida', apilar: true);
         await sesion.capturar('pos_vacio');
 
-        await _agregarAlCarrito(sesion);
+        // Un solo producto: su tarjeta queda marcada ("En carrito").
+        await _agregarAlCarrito(sesion, ['Arroz selecto']);
+        await sesion.capturar('pos_producto_marcado');
+
+        await _agregarAlCarrito(sesion, [
+          'Habichuelas rojas',
+          'Aceite vegetal 1 L',
+        ]);
         await sesion.capturar('pos_telefono');
+
+        // Cobro: total RD$ 260 -> chips Exacto/500/1000/2000; con el 500 el
+        // cambio (RD$ 240) es el dato principal.
+        await sesion.tocarTexto('Cobrar');
+        await sesion.capturar('pos_cobro');
+        await sesion.tocarTexto('500');
+        await sesion.capturar('pos_cobro_cambio');
+        await sesion.tocarTexto('Cancelar');
 
         await sesion.tocarTexto('3 artículos');
         await sesion.capturar('pos_hoja_carrito');
@@ -214,8 +229,18 @@ void main() {
       textScale: 1.6,
       cuerpo: (sesion) async {
         await sesion.ir('/ventas/rapida', apilar: true);
-        await _agregarAlCarrito(sesion);
+        // Con texto 1.6 solo caben ~3 filas: se eligen productos visibles (el
+        // scroll automático tomaría el Scrollable de la pantalla de abajo).
+        await _agregarAlCarrito(sesion, [
+          'Aceite vegetal 1 L',
+          'Agua 500 ml',
+          'Arroz selecto',
+        ]);
         await sesion.capturar('pos_texto_grande');
+
+        await sesion.tocarTexto('Cobrar');
+        await sesion.capturar('pos_texto_grande_cobro');
+        await sesion.tocarTexto('Cancelar');
 
         await sesion.tocarTexto('3 artículos');
         await sesion.capturar('pos_texto_grande_hoja');
@@ -249,14 +274,17 @@ void main() {
   });
 }
 
-/// Agrega tres productos al carrito del POS (toca la tarjeta y confirma la
+/// Agrega productos al carrito del POS (por defecto tres; toca la tarjeta y confirma la
 /// cantidad por defecto del diálogo).
-Future<void> _agregarAlCarrito(SesionVisual sesion) async {
-  for (final producto in [
+Future<void> _agregarAlCarrito(
+  SesionVisual sesion, [
+  List<String> productos = const [
     'Arroz selecto',
     'Habichuelas rojas',
     'Aceite vegetal 1 L',
-  ]) {
+  ],
+]) async {
+  for (final producto in productos) {
     await sesion.tocarTexto(producto);
     await sesion.tocarTexto('Agregar');
   }

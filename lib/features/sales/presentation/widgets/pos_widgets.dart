@@ -1,9 +1,13 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/enums.dart';
+import '../../../../core/errors/result.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_states.dart';
@@ -12,14 +16,6 @@ import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../products/domain/entities/producto.dart';
 import '../../domain/entities/venta.dart';
 import '../providers/sales_providers.dart';
-
-/// Cantidad legible: entera sin decimales ("3"), fraccionaria con hasta 2
-/// ("0.5", "2.25").
-String formatoCantidad(double cantidad) {
-  if (cantidad == cantidad.roundToDouble()) return cantidad.toStringAsFixed(0);
-  final texto = cantidad.toStringAsFixed(2);
-  return texto.endsWith('0') ? texto.substring(0, texto.length - 1) : texto;
-}
 
 bool _esAdministrador(WidgetRef ref) =>
     switch (ref.watch(authControllerProvider).value) {
@@ -81,40 +77,77 @@ Future<void> agregarProductoAlCarrito(
 
 /// Cobra el carrito: pide el monto recibido, registra la venta y limpia el
 /// carrito. Devuelve `true` si la venta quedó registrada.
+///
+/// Solo puede haber un cobro a la vez ([faseCobroProvider]): el guard se
+/// toma de forma síncrona al pulsar "Cobrar", así que un doble toque no lanza
+/// dos ventas. Si el registro falla, el carrito se conserva intacto.
 Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
-  final total = ref.read(carritoVentaProvider).total;
-  final recibido = await showDialog<Money>(
-    context: context,
-    builder: (_) => CobroDialog(total: total),
-  );
-  if (recibido == null) return false;
+  if (ref.read(faseCobroProvider) != FaseCobro.libre) return false;
+  // Se capturan antes de los await: la barra puede desmontarse al vaciarse el
+  // carrito y el guard debe liberarse igual.
+  final fase = ref.read(faseCobroProvider.notifier);
+  final carrito = ref.read(carritoVentaProvider.notifier);
+  final registrar = carrito.registrar;
+  fase.establecer(FaseCobro.ingresandoMonto);
+  try {
+    final total = ref.read(carritoVentaProvider).total;
+    final recibido = await showDialog<Money>(
+      context: context,
+      builder: (_) => CobroDialog(total: total),
+    );
+    if (recibido == null) return false;
 
-  final usuarioId = switch (ref.read(authControllerProvider).value) {
-    SesionActiva(:final usuario) => usuario.id,
-    _ => null,
-  };
-  if (usuarioId == null || !context.mounted) return false;
+    final usuarioId = switch (ref.read(authControllerProvider).value) {
+      SesionActiva(:final usuario) => usuario.id,
+      _ => null,
+    };
+    if (usuarioId == null || !context.mounted) return false;
 
-  final resultado = await ref
-      .read(carritoVentaProvider.notifier)
-      .registrar(tipo: TipoVenta.rapida, usuarioId: usuarioId);
-  if (!context.mounted) return false;
-
-  return resultado.when(
-    ok: (_) {
-      ref.read(carritoVentaProvider.notifier).limpiar();
-      final cambio = recibido - total;
-      AppSnackbar.exito(
-        context,
-        'Venta registrada. Cambio: ${cambio.format()}',
+    fase.establecer(FaseCobro.registrando);
+    final Result<String> resultado;
+    try {
+      resultado = await registrar(tipo: TipoVenta.rapida, usuarioId: usuarioId);
+    } catch (error, stackTrace) {
+      // Excepción inesperada (p.ej. base de datos): no se sabe si la venta se
+      // guardó, así que el carrito se conserva intacto y se avisa.
+      developer.log(
+        'Excepción al registrar la venta',
+        name: 'mi_negocio',
+        error: error,
+        stackTrace: stackTrace,
       );
-      return true;
-    },
-    fail: (f) {
-      AppSnackbar.error(context, f.message);
+      if (context.mounted) {
+        AppSnackbar.error(
+          context,
+          'No se pudo registrar la venta. Intenta de nuevo.',
+        );
+      }
       return false;
-    },
-  );
+    }
+
+    // La venta ya quedó guardada: el carrito se limpia SIEMPRE, esté o no
+    // montada la pantalla (el carrito es global; si no, los mismos productos
+    // podrían cobrarse dos veces). Solo el aviso depende del contexto.
+    return resultado.when(
+      ok: (_) {
+        carrito.limpiar();
+        if (context.mounted) {
+          final cambio = recibido - total;
+          AppSnackbar.exito(
+            context,
+            'Venta registrada · Cambio ${cambio.format()}',
+          );
+        }
+        return true;
+      },
+      fail: (f) {
+        if (context.mounted) AppSnackbar.error(context, f.message);
+        return false;
+      },
+    );
+  } finally {
+    fase.establecer(FaseCobro.libre);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +158,8 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
 /// para que nombre (2 líneas), precio y stock no desborden con texto grande.
 double alturaTarjetaProducto(BuildContext context) {
   const relleno = AppSpacing.sm * 2 + AppSpacing.xs;
-  const texto = 80.0; // nombre 2 líneas + precio + stock, a escala 1.0
+  // nombre 2 líneas + precio + stock + "En carrito", a escala 1.0
+  const texto = 100.0;
   return relleno + MediaQuery.textScalerOf(context).scale(texto) + 4;
 }
 
@@ -136,10 +170,14 @@ class ProductoPosTile extends StatelessWidget {
     super.key,
     required this.producto,
     required this.onTap,
+    this.enCarrito = 0,
   });
 
   final Producto producto;
   final VoidCallback onTap;
+
+  /// Cantidad de este producto ya en el carrito (0 = no está).
+  final double enCarrito;
 
   @override
   Widget build(BuildContext context) {
@@ -147,16 +185,23 @@ class ProductoPosTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final sinStock = producto.stockActual <= 0;
     final bajo = !sinStock && producto.stockBajo;
-    final stock = formatoCantidad(producto.stockActual);
     final etiquetaStock = sinStock
         ? 'Sin stock'
         : bajo
-        ? 'Stock bajo: $stock'
-        : '$stock disp.';
+        ? 'Stock bajo: ${formatoCantidad(producto.stockActual)}'
+        : formatoCantidadUnidad(producto.stockActual, producto.unidad);
+    final seleccionado = enCarrito > 0;
 
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
+      // Borde primario además del texto "En carrito": no solo color.
+      shape: seleccionado
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              side: BorderSide(color: scheme.primary, width: 2),
+            )
+          : null,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -208,6 +253,26 @@ class ProductoPosTile extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (seleccionado)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 14,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            'En carrito: ${formatoCantidad(enCarrito)}',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ],
@@ -288,11 +353,10 @@ class BarraCarrito extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              FilledButton(
+              _BotonCobrar(
                 // El tema fija ancho infinito; en una fila hay que acotarlo.
                 style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
                 onPressed: () => cobrarVenta(context, ref),
-                child: const Text('Cobrar'),
               ),
             ],
           ),
@@ -345,7 +409,6 @@ class _CarritoPanelState extends ConsumerState<CarritoPanel> {
   late final _notaController = TextEditingController(
     text: ref.read(carritoVentaProvider).nota ?? '',
   );
-  bool _cobrando = false;
 
   @override
   void dispose() {
@@ -368,11 +431,8 @@ class _CarritoPanelState extends ConsumerState<CarritoPanel> {
   }
 
   Future<void> _cobrar() async {
-    setState(() => _cobrando = true);
     final ok = await cobrarVenta(context, ref);
-    if (!mounted) return;
-    setState(() => _cobrando = false);
-    if (ok && widget.enHoja) Navigator.of(context).pop();
+    if (ok && mounted && widget.enHoja) Navigator.of(context).pop();
   }
 
   @override
@@ -470,14 +530,39 @@ class _CarritoPanelState extends ConsumerState<CarritoPanel> {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              FilledButton(
-                onPressed: carrito.items.isEmpty || _cobrando ? null : _cobrar,
-                child: const Text('Cobrar'),
-              ),
+              _BotonCobrar(onPressed: carrito.items.isEmpty ? null : _cobrar),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Botón "Cobrar": con un cobro en curso se deshabilita (no se puede lanzar un
+/// segundo cobro) y, mientras registra, muestra un indicador de progreso.
+class _BotonCobrar extends ConsumerWidget {
+  const _BotonCobrar({required this.onPressed, this.style});
+
+  final VoidCallback? onPressed;
+  final ButtonStyle? style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fase = ref.watch(faseCobroProvider);
+    return FilledButton(
+      style: style,
+      onPressed: fase == FaseCobro.libre ? onPressed : null,
+      child: fase == FaseCobro.registrando
+          ? SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            )
+          : const Text('Cobrar'),
     );
   }
 }
@@ -692,7 +777,19 @@ class _EditarLineaDialogState extends State<EditarLineaDialog> {
   }
 }
 
-/// Diálogo de cobro: monto recibido → cambio.
+/// Billetes dominicanos de referencia para los botones de monto rápido.
+const _billetes = [50, 100, 200, 500, 1000, 2000];
+
+/// Montos rápidos: los 3 billetes más pequeños MAYORES que el total (uno igual
+/// al total ya lo cubre "Exacto"). Con total sobre el billete mayor: ninguno.
+List<Money> montosRapidos(Money total) => [
+  for (final billete in _billetes)
+    if (Money.fromPesos(billete) > total) Money.fromPesos(billete),
+].take(3).toList();
+
+/// Diálogo de cobro: monto recibido → cambio. El campo abre con el total
+/// seleccionado (escribir el billete lo reemplaza), Enter confirma y los
+/// chips fijan el monto; el cambio es el dato principal.
 class CobroDialog extends StatefulWidget {
   const CobroDialog({super.key, required this.total});
 
@@ -709,9 +806,22 @@ class _CobroDialogState extends State<CobroDialog> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _seleccionarTodo();
+  }
+
+  @override
   void dispose() {
     _montoController.dispose();
     super.dispose();
+  }
+
+  void _seleccionarTodo() {
+    _montoController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _montoController.text.length,
+    );
   }
 
   Money? _recibidoActual() {
@@ -724,65 +834,126 @@ class _CobroDialogState extends State<CobroDialog> {
     }
   }
 
+  void _fijar(Money monto) {
+    setState(() {
+      _montoController.text = monto.format(symbol: false);
+      _seleccionarTodo();
+    });
+  }
+
+  void _confirmar() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(_recibidoActual());
+  }
+
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final recibido = _recibidoActual();
-    final cambio = recibido != null ? recibido - widget.total : null;
+    final diferencia = recibido != null ? recibido - widget.total : null;
+    final montos = [widget.total, ...montosRapidos(widget.total)];
+
+    final Widget cambio;
+    if (diferencia == null) {
+      cambio = Text('--', style: textTheme.titleLarge);
+    } else if (diferencia.isNegative) {
+      cambio = Text(
+        'Faltan ${(-diferencia).format()}',
+        style: textTheme.titleLarge?.copyWith(
+          color: scheme.error,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    } else {
+      cambio = Row(
+        children: [
+          Text('Cambio', style: textTheme.titleMedium),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: MoneyText(
+              diferencia,
+              textAlign: TextAlign.right,
+              style: textTheme.headlineMedium?.copyWith(
+                color: context.appColors.exito,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return AlertDialog(
       title: const Text('Cobrar'),
       content: Form(
         key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total'),
-                Text(
-                  widget.total.format(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _montoController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Monto recibido',
-                prefixText: 'RD\$ ',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text('Total', style: textTheme.titleMedium),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: MoneyText(
+                      widget.total,
+                      textAlign: TextAlign.right,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                final monto = _recibidoActual();
-                if (monto == null) return 'Monto inválido';
-                if (monto < widget.total) return 'Monto insuficiente';
-                return null;
-              },
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Cambio'),
-                Text(
-                  (cambio == null || cambio.isNegative)
-                      ? '--'
-                      : cambio.format(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _montoController,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Monto recibido',
+                  prefixText: 'RD\$ ',
                 ),
-              ],
-            ),
-          ],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Obligatorio';
+                  final monto = _recibidoActual();
+                  if (monto == null) return 'Monto inválido';
+                  if (monto < widget.total) return 'Monto insuficiente';
+                  return null;
+                },
+                onChanged: (_) => setState(() {}),
+                onFieldSubmitted: (_) => _confirmar(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  for (var i = 0; i < montos.length; i++)
+                    ChoiceChip(
+                      label: Text(
+                        i == 0
+                            ? 'Exacto'
+                            : formatoCantidad(montos[i].cents / 100),
+                      ),
+                      selected: recibido == montos[i],
+                      onSelected: (_) => _fijar(montos[i]),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              cambio,
+            ],
+          ),
         ),
       ),
       actions: [
@@ -790,13 +961,7 @@ class _CobroDialogState extends State<CobroDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-            Navigator.of(context).pop(_recibidoActual());
-          },
-          child: const Text('Confirmar'),
-        ),
+        FilledButton(onPressed: _confirmar, child: const Text('Confirmar')),
       ],
     );
   }

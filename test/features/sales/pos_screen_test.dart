@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:app_gestion/core/database/enums.dart';
 import 'package:app_gestion/core/errors/result.dart';
 import 'package:app_gestion/core/router/app_router.dart';
@@ -68,6 +70,19 @@ class _VentasFalsas implements SalesRepository {
     DateTime? hasta,
   }) => Stream.value(const []);
 
+  /// Llamadas a registrarVenta (incluye las que fallan o siguen pendientes).
+  int llamadas = 0;
+
+  /// Si no es null, el registro espera este completer (simula un registro
+  /// lento).
+  Completer<void>? pausa;
+
+  /// Si no es null, el registro falla con este mensaje.
+  String? falla;
+
+  /// Si es true, el registro LANZA una excepción (no devuelve Result).
+  bool lanza = false;
+
   @override
   Future<Result<String>> registrarVenta({
     required TipoVenta tipo,
@@ -75,6 +90,10 @@ class _VentasFalsas implements SalesRepository {
     String? nota,
     required String usuarioId,
   }) async {
+    llamadas++;
+    await pausa?.future;
+    if (lanza) throw StateError('base de datos caída');
+    if (falla != null) return Result.fail(DatabaseFailure(falla!));
     registradas.add((
       tipo: tipo,
       items: items,
@@ -111,10 +130,11 @@ Producto _producto(
   Money precio = const Money(15000),
   double stock = 20,
   double minimo = 2,
+  String unidad = 'unidad',
 }) => Producto(
   id: nombre,
   nombre: nombre,
-  unidad: 'unidad',
+  unidad: unidad,
   precioCompra: const Money(1000),
   precioVenta: precio,
   stockActual: stock,
@@ -173,6 +193,11 @@ Future<_Escenario> _montar(
     ),
   );
   await tester.pumpAndSettle();
+  // En producción el router mantiene viva la sesión; aquí se resuelve para que
+  // el cobro desde la barra del teléfono (que no la observa) la encuentre.
+  await ProviderScope.containerOf(
+    tester.element(find.byType(MaterialApp)),
+  ).read(authControllerProvider.future);
   return _Escenario(ventas);
 }
 
@@ -296,7 +321,7 @@ void main() {
         ],
       );
 
-      expect(find.text('12 disp.'), findsOneWidget);
+      expect(find.text('12 unidades'), findsOneWidget);
       expect(find.text('Stock bajo: 3'), findsOneWidget);
       expect(find.text('Sin stock'), findsOneWidget);
     });
@@ -407,7 +432,7 @@ void main() {
         find.widgetWithText(TextField, 'Nota (opcional)'),
       );
       expect(nota.controller!.text, isEmpty);
-      expect(find.text('Venta registrada. Cambio: RD\$ 0.00'), findsOneWidget);
+      expect(find.text('Venta registrada · Cambio RD\$ 0.00'), findsOneWidget);
     });
 
     testWidgets('"Cobrar" está deshabilitado con el carrito vacío', (
@@ -416,6 +441,240 @@ void main() {
       await _montar(tester);
 
       expect(tester.widget<FilledButton>(_boton('Cobrar')).onPressed, isNull);
+    });
+  });
+
+  group('cobro a prueba de errores', () {
+    testWidgets('doble toque rápido en "Cobrar" produce UNA sola venta', (
+      tester,
+    ) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      // Dos toques seguidos, sin frame entre ellos.
+      await tester.tap(_boton('Cobrar'));
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CobroDialog), findsOneWidget);
+
+      await tester.tap(find.text('Confirmar'));
+      await tester.pumpAndSettle();
+
+      expect(escenario.ventas.llamadas, 1);
+      expect(escenario.ventas.registradas, hasLength(1));
+    });
+
+    testWidgets('durante el registro el botón muestra progreso y no permite '
+        'otro cobro', (tester) async {
+      final escenario = await _montar(tester);
+      escenario.ventas.pausa = Completer<void>();
+      await _agregar(tester, 'Arroz');
+
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar'));
+      await tester.pump();
+      await tester.pump();
+
+      // Registro pendiente: progreso en el botón, deshabilitado.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      final boton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.byType(CircularProgressIndicator),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(boton.onPressed, isNull);
+      expect(escenario.ventas.llamadas, 1);
+
+      escenario.ventas.pausa!.complete();
+      await tester.pumpAndSettle();
+
+      expect(escenario.ventas.registradas, hasLength(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Toca un producto para agregarlo'), findsOneWidget);
+    });
+
+    testWidgets('teléfono: doble toque en "Cobrar" de la barra = una venta', (
+      tester,
+    ) async {
+      final escenario = await _montar(tester, tamano: _telefono);
+      await _agregar(tester, 'Arroz');
+
+      await tester.tap(_boton('Cobrar'));
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar'));
+      await tester.pumpAndSettle();
+
+      expect(escenario.ventas.llamadas, 1);
+      expect(escenario.ventas.registradas, hasLength(1));
+    });
+
+    testWidgets('cancelar el diálogo libera el guard y permite cobrar de '
+        'nuevo', (tester) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(escenario.ventas.llamadas, 0);
+
+      await _cobrar(tester);
+      expect(escenario.ventas.registradas, hasLength(1));
+    });
+
+    testWidgets('si el registro falla el carrito se conserva y se avisa', (
+      tester,
+    ) async {
+      final escenario = await _montar(tester);
+      escenario.ventas.falla = 'No hay caja abierta.';
+      await _agregar(tester, 'Arroz', cantidad: '2');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nota (opcional)'),
+        'Para llevar',
+      );
+
+      await _cobrar(tester);
+
+      expect(escenario.ventas.llamadas, 1);
+      expect(escenario.ventas.registradas, isEmpty);
+      expect(find.text('No hay caja abierta.'), findsOneWidget);
+      // Las líneas y la nota siguen ahí.
+      expect(find.text('Toca un producto para agregarlo'), findsNothing);
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+      final nota = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Nota (opcional)'),
+      );
+      expect(nota.controller!.text, 'Para llevar');
+
+      // El guard se liberó: se puede reintentar (el snackbar de error tapa el
+      // botón hasta que se cierra).
+      escenario.ventas.falla = null;
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+      await _cobrar(tester);
+      expect(escenario.ventas.registradas, hasLength(1));
+    });
+  });
+
+  group('cobro: robustez ante desmontaje y excepciones', () {
+    testWidgets('si la pantalla se desmonta mientras se registra, la venta '
+        'queda guardada UNA vez y el carrito global se limpia', (tester) async {
+      final visible = ValueNotifier<bool>(true);
+      addTearDown(visible.dispose);
+      final escenario = await _montar(
+        tester,
+        home: ValueListenableBuilder<bool>(
+          valueListenable: visible,
+          builder: (_, mostrar, _) =>
+              mostrar ? const PosScreen() : const SizedBox.shrink(),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      escenario.ventas.pausa = Completer<void>();
+      await _agregar(tester, 'Arroz');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nota (opcional)'),
+        'Para llevar',
+      );
+
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar'));
+      await tester.pump();
+      await tester.pump();
+      expect(escenario.ventas.llamadas, 1);
+
+      // El cajero sale de la pantalla con el registro pendiente.
+      visible.value = false;
+      await tester.pump();
+      expect(find.byType(PosScreen), findsNothing);
+
+      escenario.ventas.pausa!.complete();
+      await tester.pumpAndSettle();
+
+      expect(escenario.ventas.registradas, hasLength(1));
+      final carrito = container.read(carritoVentaProvider);
+      expect(carrito.items, isEmpty);
+      expect(carrito.nota, isNull);
+      expect(container.read(faseCobroProvider), FaseCobro.libre);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('si registrar LANZA: se avisa, el carrito queda intacto y el '
+        'guard se libera', (tester) async {
+      final escenario = await _montar(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      escenario.ventas.lanza = true;
+      await _agregar(tester, 'Arroz', cantidad: '2');
+
+      await _cobrar(tester);
+
+      expect(escenario.ventas.llamadas, 1);
+      expect(
+        find.text('No se pudo registrar la venta. Intenta de nuevo.'),
+        findsOneWidget,
+      );
+      expect(container.read(carritoVentaProvider).items, hasLength(1));
+      expect(container.read(carritoVentaProvider).items.single.cantidad, 2);
+      expect(container.read(faseCobroProvider), FaseCobro.libre);
+      expect(tester.takeException(), isNull);
+
+      // Se puede reintentar.
+      escenario.ventas.lanza = false;
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+      await _cobrar(tester);
+      expect(escenario.ventas.registradas, hasLength(1));
+    });
+  });
+
+  group('tarjetas del catálogo', () {
+    testWidgets('el stock lleva su unidad y "unidad" se pluraliza', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        productos: [
+          _producto('Una', stock: 1, minimo: 0),
+          _producto('Varias', stock: 34, minimo: 0),
+          _producto('Carne', unidad: 'lb', stock: 8.5, minimo: 0),
+        ],
+      );
+
+      expect(find.text('1 unidad'), findsOneWidget);
+      expect(find.text('34 unidades'), findsOneWidget);
+      expect(find.text('8.5 lb'), findsOneWidget);
+    });
+
+    testWidgets('un producto en el carrito muestra "En carrito: N" y borde '
+        'primario', (tester) async {
+      await _montar(tester);
+      expect(find.textContaining('En carrito'), findsNothing);
+
+      await _agregar(tester, 'Arroz', cantidad: '2');
+
+      expect(find.text('En carrito: 2'), findsOneWidget);
+      final tarjeta = tester.widget<Card>(
+        find.ancestor(
+          of: find.text('En carrito: 2'),
+          matching: find.byType(Card),
+        ),
+      );
+      final forma = tarjeta.shape! as RoundedRectangleBorder;
+      expect(
+        forma.side.color,
+        Theme.of(tester.element(find.byType(PosScreen))).colorScheme.primary,
+      );
+      // La otra tarjeta no está marcada.
+      expect(find.textContaining('En carrito'), findsOneWidget);
     });
   });
 

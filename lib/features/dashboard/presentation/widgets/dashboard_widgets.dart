@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../license/domain/entities/licencia.dart';
@@ -570,9 +571,8 @@ class InventarioBajoSeccion extends ConsumerWidget {
                     ListTile(
                       title: Text(producto.nombre),
                       subtitle: Text(
-                        'Quedan ${_cantidad(producto.stockActual)} '
-                        '${producto.unidad} · mínimo '
-                        '${_cantidad(producto.stockMinimo)}',
+                        'Quedan ${formatoCantidadUnidad(producto.stockActual, producto.unidad)}'
+                        ' · mínimo ${_cantidad(producto.stockMinimo)}',
                       ),
                       trailing: _Etiqueta(
                         icono: Icons.warning_amber_outlined,

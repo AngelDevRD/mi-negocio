@@ -49,6 +49,7 @@ List<Override> _overrides({
   required RolUsuario rol,
   bool cajaAbierta = true,
   bool hayProductos = true,
+  List<ProductoBajoStock> bajoStock = const [],
 }) => [
   authControllerProvider.overrideWith(
     () => _AuthFalso(SesionActiva(_usuario(rol))),
@@ -69,7 +70,7 @@ List<Override> _overrides({
   gananciaDelMesProvider.overrideWith(
     (ref) => Stream.value(const Money(300000)),
   ),
-  productosBajoStockProvider.overrideWith((ref) => Stream.value(const [])),
+  productosBajoStockProvider.overrideWith((ref) => Stream.value(bajoStock)),
   movimientosRecientesProvider.overrideWith((ref) => Stream.value(const [])),
 ];
 
@@ -194,6 +195,38 @@ void main() {
 
       expect(find.text('Ganancia bruta del mes'), findsOneWidget);
       expect(find.text(const Money(300000).format()), findsOneWidget);
+    });
+  });
+
+  group('inventario bajo', () {
+    testWidgets('el stock lleva su unidad y "unidad" se pluraliza', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        _overrides(
+          rol: RolUsuario.cajero,
+          bajoStock: const [
+            ProductoBajoStock(
+              id: 'a',
+              nombre: 'Aceite',
+              stockActual: 2,
+              stockMinimo: 5,
+              unidad: 'unidad',
+            ),
+            ProductoBajoStock(
+              id: 'b',
+              nombre: 'Salami',
+              stockActual: 1.5,
+              stockMinimo: 4,
+              unidad: 'lb',
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('Quedan 2 unidades · mínimo 5'), findsOneWidget);
+      expect(find.text('Quedan 1.5 lb · mínimo 4'), findsOneWidget);
     });
   });
 

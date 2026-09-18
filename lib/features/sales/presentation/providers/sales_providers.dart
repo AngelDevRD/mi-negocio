@@ -159,3 +159,20 @@ final carritoVentaProvider =
     NotifierProvider<CarritoVentaController, CarritoVentaState>(
       CarritoVentaController.new,
     );
+
+/// Fase del cobro en curso.
+enum FaseCobro { libre, ingresandoMonto, registrando }
+
+/// Fase actual del cobro. Bloquea un segundo cobro desde que se pulsa "Cobrar"
+/// (diálogo abierto y registro incluidos), sea desde la barra del teléfono o
+/// desde el panel/hoja del carrito; el progreso solo se muestra al registrar.
+final faseCobroProvider = NotifierProvider<FaseCobroController, FaseCobro>(
+  FaseCobroController.new,
+);
+
+class FaseCobroController extends Notifier<FaseCobro> {
+  @override
+  FaseCobro build() => FaseCobro.libre;
+
+  void establecer(FaseCobro fase) => state = fase;
+}
