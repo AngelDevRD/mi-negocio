@@ -8,6 +8,8 @@ import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
 import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
+import 'package:app_gestion/features/cash_register/data/datasources/cash_register_local_datasource.dart';
+import 'package:app_gestion/features/cash_register/data/repositories/cash_register_repository_impl.dart';
 import 'package:app_gestion/features/expenses/data/datasources/expenses_local_datasource.dart';
 import 'package:app_gestion/features/expenses/data/repositories/expenses_repository_impl.dart';
 import 'package:app_gestion/features/license/domain/entities/licencia.dart';
@@ -124,8 +126,12 @@ class BaseDemo {
 /// con los repositorios reales, así stock, caja y auditoría quedan coherentes.
 ///
 /// Con [vacia] = true solo se crean negocio y usuarios (para revisar los
-/// estados vacíos).
-Future<BaseDemo> crearBaseDemo({bool vacia = false}) async {
+/// estados vacíos). Con [cajaCerrada] = true se siembra todo y al final se
+/// cierra la caja (las ventas exigen caja abierta).
+Future<BaseDemo> crearBaseDemo({
+  bool vacia = false,
+  bool cajaCerrada = false,
+}) async {
   // Cada escenario crea su propia base (la anterior ya se cerró): el aviso de
   // drift por "varias bases" es ruido aquí.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -178,6 +184,14 @@ Future<BaseDemo> crearBaseDemo({bool vacia = false}) async {
   }
 
   if (!vacia) await _sembrarMovimientos(db, admin.id);
+  if (cajaCerrada && !vacia) {
+    final caja = CashRegisterRepositoryImpl(CashRegisterLocalDatasource(db));
+    await caja.cerrarCaja(
+      montoContado: const Money(861400),
+      montoDejarSiguiente: const Money(500000),
+      usuarioId: admin.id,
+    );
+  }
 
   return BaseDemo(db: db, admin: admin, cajero: cajero);
 }

@@ -74,6 +74,22 @@ void main() {
     );
   });
 
+  testWidgets('teléfono · administrador · caja cerrada', (tester) async {
+    final base = (await tester.runAsync(
+      () => crearBaseDemo(cajaCerrada: true),
+    ))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · caja cerrada',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.capturar('caja_cerrada_inicio');
+      },
+    );
+  });
+
   testWidgets('teléfono · administrador · base vacía', (tester) async {
     final base = (await tester.runAsync(() => crearBaseDemo(vacia: true)))!;
     await escenarioVisual(

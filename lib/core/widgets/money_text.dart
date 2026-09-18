@@ -34,7 +34,14 @@ class MoneyText extends StatelessWidget {
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: alineacion,
-      child: Text(monto.format(), style: base, textAlign: textAlign),
+      // softWrap: false: el FittedBox lo dibuja en una línea; sin esto, el alto
+      // intrínseco (IntrinsicHeight) contaría un texto envuelto en 2 líneas.
+      child: Text(
+        monto.format(),
+        style: base,
+        textAlign: textAlign,
+        softWrap: false,
+      ),
     );
   }
 }

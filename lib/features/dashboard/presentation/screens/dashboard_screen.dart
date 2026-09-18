@@ -1,447 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
-import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/money.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../../../license/domain/entities/licencia.dart';
-import '../../../license/presentation/providers/license_providers.dart';
-import '../../domain/entities/dashboard_data.dart';
 import '../providers/dashboard_providers.dart';
+import '../widgets/dashboard_widgets.dart';
+
+/// Ancho máximo del contenido: en pantallas muy anchas no se estira.
+const double _anchoMaximo = 1100;
+
+/// Ancho de contenido desde el que "Inventario bajo" y "Últimos movimientos"
+/// van lado a lado. El contenido descuenta el rail de navegación y el padding,
+/// por eso el umbral es menor que el ancho de pantalla (~1000 px).
+const double _anchoDosColumnas = 900;
 
 /// Pantalla principal post-login (RF-DASH). Vista diferenciada por rol:
-/// la ganancia del mes solo se muestra al Administrador (RN-15).
+/// la ganancia bruta del mes solo se muestra al Administrador (RN-15).
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-    final usuario = switch (auth.value) {
+    final usuario = switch (ref.watch(authControllerProvider).value) {
       SesionActiva(:final usuario) => usuario,
       _ => null,
     };
     final esAdmin = usuario?.esAdministrador ?? false;
+    // Mientras carga se asume que hay productos (evita parpadear la bienvenida).
+    final hayProductos = ref.watch(negocioTieneProductosProvider).value ?? true;
+    // Mientras carga o si falla se asume abierta (no cambia el botón principal).
+    final caja = ref.watch(cajaActualProvider);
+    final cajaAbierta = !caja.hasValue || caja.value != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Inicio')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        children: [
-          if (usuario != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: Text(
-                'Hola, ${usuario.nombre}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          if (esAdmin) const _VencimientoBanner(),
-          const _CajaActualCard(),
-          const SizedBox(height: AppSpacing.md),
-          _AccesosRapidos(
-            onVender: () => context.go(AppRoutes.ventas),
-            onComprar: () => context.push(AppRoutes.compras),
-            onCaja: () => context.go(AppRoutes.caja),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: AppSpacing.sm,
-            crossAxisSpacing: AppSpacing.sm,
-            childAspectRatio: 1.5,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _anchoMaximo),
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
             children: [
-              _StatCard(
-                titulo: 'Ventas de hoy',
-                icono: Icons.point_of_sale,
-                valor: ref.watch(ventasDelDiaProvider),
-              ),
-              _StatCard(
-                titulo: 'Ventas del mes',
-                icono: Icons.trending_up,
-                valor: ref.watch(ventasDelMesProvider),
-              ),
-              _StatCard(
-                titulo: 'Compras del mes',
-                icono: Icons.shopping_cart_outlined,
-                valor: ref.watch(comprasDelMesProvider),
-              ),
-              _StatCard(
-                titulo: 'Gastos del mes',
-                icono: Icons.receipt_long_outlined,
-                valor: ref.watch(gastosDelMesProvider),
-              ),
-              if (esAdmin)
-                _StatCard(
-                  titulo: 'Ganancia del mes',
-                  icono: Icons.savings_outlined,
-                  valor: ref.watch(gananciaDelMesProvider),
-                  destacado: true,
-                ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Inventario bajo',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const _ProductosBajoStock(),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Últimos movimientos',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const _MovimientosRecientes(),
-        ],
-      ),
-    );
-  }
-}
-
-/// Alerta de vencimiento próximo de la suscripción (F18), solo Administrador.
-class _VencimientoBanner extends ConsumerWidget {
-  const _VencimientoBanner();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final check = ref.watch(licenseControllerProvider).value;
-    final licencia = switch (check) {
-      LicenciaActiva(:final licencia) => licencia,
-      LicenciaBloqueada(:final licencia) => licencia,
-      _ => null,
-    };
-    if (licencia == null) return const SizedBox.shrink();
-
-    final dias = licencia.diasParaVencer(DateTime.now().toUtc());
-    if (dias == null || dias > diasAlertaRenovacion) {
-      return const SizedBox.shrink();
-    }
-
-    final scheme = Theme.of(context).colorScheme;
-    final mensaje = dias <= 0
-        ? 'Tu suscripción venció. Renueva desde Perfil para evitar '
-              'interrupciones.'
-        : 'Tu suscripción vence en $dias ${dias == 1 ? 'día' : 'días'}. '
-              'Renueva desde Perfil.';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Card(
-        color: scheme.errorContainer,
-        child: ListTile(
-          leading: Icon(
-            Icons.warning_amber_outlined,
-            color: scheme.onErrorContainer,
-          ),
-          title: Text(
-            mensaje,
-            style: TextStyle(color: scheme.onErrorContainer),
-          ),
-          trailing: Icon(Icons.chevron_right, color: scheme.onErrorContainer),
-          onTap: () => context.push(AppRoutes.perfil),
-        ),
-      ),
-    );
-  }
-}
-
-class _CajaActualCard extends ConsumerWidget {
-  const _CajaActualCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final caja = ref.watch(cajaActualProvider);
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      color: scheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: caja.when(
-          loading: () => const SizedBox(
-            height: 48,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (_, _) => Text(
-            'No se pudo cargar el estado de caja',
-            style: TextStyle(color: scheme.onPrimaryContainer),
-          ),
-          data: (sesion) {
-            if (sesion == null) {
-              return Row(
-                children: [
-                  Icon(Icons.lock_outline, color: scheme.onPrimaryContainer),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    'Caja cerrada',
-                    style: TextStyle(
-                      color: scheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Icon(
-                  Icons.point_of_sale_outlined,
-                  color: scheme.onPrimaryContainer,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Caja abierta',
-                        style: TextStyle(
-                          color: scheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        sesion.montoActual.format(),
-                        style: TextStyle(
-                          color: scheme.onPrimaryContainer,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+              if (usuario != null) ...[
+                SaludoUsuario(nombre: usuario.nombre),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+              if (esAdmin) const VencimientoBanner(),
+              TarjetaCaja(abrirEsPrimaria: hayProductos),
+              const SizedBox(height: AppSpacing.md),
+              // Sin productos no hay nada que vender ni comprar: la única
+              // acción principal es "Agregar producto" (en la bienvenida).
+              if (!hayProductos)
+                TarjetaBienvenida(esAdmin: esAdmin)
+              else ...[
+                AccionesPrincipales(cajaAbierta: cajaAbierta),
+                const SizedBox(height: AppSpacing.lg),
+                const VentasHoyCard(),
+                const SizedBox(height: AppSpacing.sm),
+                IndicadoresMes(esAdmin: esAdmin),
+                const SizedBox(height: AppSpacing.lg),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth >= _anchoDosColumnas) {
+                      return const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: InventarioBajoSeccion()),
+                          SizedBox(width: AppSpacing.md),
+                          Expanded(child: MovimientosRecientesSeccion()),
+                        ],
+                      );
+                    }
+                    return const Column(
+                      children: [
+                        InventarioBajoSeccion(),
+                        SizedBox(height: AppSpacing.lg),
+                        MovimientosRecientesSeccion(),
+                      ],
+                    );
+                  },
                 ),
               ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _AccesosRapidos extends StatelessWidget {
-  const _AccesosRapidos({
-    required this.onVender,
-    required this.onComprar,
-    required this.onCaja,
-  });
-
-  final VoidCallback onVender;
-  final VoidCallback onComprar;
-  final VoidCallback onCaja;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: onVender,
-            icon: const Icon(Icons.point_of_sale),
-            label: const Text('Vender'),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: onComprar,
-            icon: const Icon(Icons.shopping_cart_outlined),
-            label: const Text('Comprar'),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: onCaja,
-            icon: const Icon(Icons.point_of_sale_outlined),
-            label: const Text('Caja'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.titulo,
-    required this.icono,
-    required this.valor,
-    this.destacado = false,
-  });
-
-  final String titulo;
-  final IconData icono;
-  final AsyncValue<Money> valor;
-  final bool destacado;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      color: destacado ? scheme.secondaryContainer : null,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(icono, size: 18, color: scheme.primary),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    titulo,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            valor.when(
-              data: (money) => Text(
-                money.format(),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
-              loading: () => const SizedBox(
-                height: 18,
-                width: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              error: (_, _) => const Text('--'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProductosBajoStock extends ConsumerWidget {
-  const _ProductosBajoStock();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final productos = ref.watch(productosBajoStockProvider);
-    return productos.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (_, _) => const Text('No se pudo cargar el inventario.'),
-      data: (lista) {
-        if (lista.isEmpty) {
-          return const _EmptyHint(
-            icono: Icons.inventory_2_outlined,
-            mensaje: 'Sin productos con inventario bajo.',
-          );
-        }
-        return Card(
-          child: Column(
-            children: [
-              for (final producto in lista)
-                ListTile(
-                  leading: const Icon(Icons.warning_amber_outlined),
-                  title: Text(producto.nombre),
-                  trailing: Text(
-                    '${producto.stockActual.toStringAsFixed(2)} / '
-                    '${producto.stockMinimo.toStringAsFixed(2)} ${producto.unidad}',
-                  ),
-                ),
             ],
           ),
-        );
-      },
-    );
-  }
-}
-
-class _MovimientosRecientes extends ConsumerWidget {
-  const _MovimientosRecientes();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final movimientos = ref.watch(movimientosRecientesProvider);
-    final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
-    return movimientos.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (_, _) => const Text('No se pudieron cargar los movimientos.'),
-      data: (lista) {
-        if (lista.isEmpty) {
-          return const _EmptyHint(
-            icono: Icons.receipt_long_outlined,
-            mensaje: 'Aún no hay movimientos registrados.',
-          );
-        }
-        return Card(
-          child: Column(
-            children: [
-              for (final mov in lista)
-                ListTile(
-                  leading: Icon(_iconoMovimiento(mov.tipo)),
-                  title: Text(_tituloMovimiento(mov.tipo)),
-                  subtitle: Text(formatoFecha.format(mov.fecha.toLocal())),
-                  trailing: Text(mov.monto.format()),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  IconData _iconoMovimiento(TipoMovimientoReciente tipo) => switch (tipo) {
-    TipoMovimientoReciente.venta => Icons.point_of_sale,
-    TipoMovimientoReciente.compra => Icons.shopping_cart_outlined,
-    TipoMovimientoReciente.gasto => Icons.receipt_long_outlined,
-  };
-
-  String _tituloMovimiento(TipoMovimientoReciente tipo) => switch (tipo) {
-    TipoMovimientoReciente.venta => 'Venta',
-    TipoMovimientoReciente.compra => 'Compra',
-    TipoMovimientoReciente.gasto => 'Gasto',
-  };
-}
-
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.icono, required this.mensaje});
-
-  final IconData icono;
-  final String mensaje;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Icon(icono, color: scheme.outline),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                mensaje,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
         ),
       ),
     );

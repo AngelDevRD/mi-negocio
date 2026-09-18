@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/utils/money.dart';
+import '../../../products/presentation/providers/products_providers.dart';
 import '../../data/datasources/dashboard_dao.dart';
 import '../../domain/entities/dashboard_data.dart';
 
@@ -73,4 +74,15 @@ final movimientosRecientesProvider = StreamProvider<List<MovimientoReciente>>((
   ref,
 ) {
   return ref.watch(dashboardDaoProvider).watchMovimientosRecientes();
+});
+
+/// ¿El negocio ya tiene productos (activos o no)? Decide si el Inicio muestra
+/// los indicadores o la bienvenida de primer uso. Se lee del repositorio de
+/// productos sin pasar por [productosFiltroProvider]: el filtro de la pestaña
+/// Productos no debe afectar a esta decisión.
+final negocioTieneProductosProvider = StreamProvider.autoDispose<bool>((ref) {
+  return ref
+      .watch(productsRepositoryProvider)
+      .watchProductos()
+      .map((productos) => productos.isNotEmpty);
 });
