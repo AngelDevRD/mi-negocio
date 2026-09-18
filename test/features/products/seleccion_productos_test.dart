@@ -91,9 +91,13 @@ List<Override> _overrides() => [
   permitirStockNegativoProvider.overrideWith((ref) => Stream.value(true)),
 ];
 
-Future<void> _superficieAncha(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(1400, 900));
-  addTearDown(() => tester.binding.setSurfaceSize(null));
+/// PosScreen decide por MediaQuery.sizeOf: setSurfaceSize NO lo cambia (seguía
+/// en 800x600 y el test corría con la disposición de teléfono), así que se fija
+/// la vista con DPR 1.
+void _superficieAncha(WidgetTester tester) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(1400, 900);
+  addTearDown(tester.view.reset);
 }
 
 Finder _en(Type pantalla, Finder buscado) =>
@@ -104,7 +108,7 @@ void main() {
     'buscar en la selección de venta rápida NO filtra la lista de Productos '
     'ni cambia productosFiltroProvider',
     (tester) async {
-      await _superficieAncha(tester);
+      _superficieAncha(tester);
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(),
@@ -120,6 +124,12 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
+
+      // PosScreen ve realmente el ancho de escritorio (decide por MediaQuery).
+      expect(
+        MediaQuery.sizeOf(tester.element(find.byType(PosScreen))).width,
+        1400,
+      );
 
       // Ambas pantallas muestran los productos activos.
       expect(_en(ProductsListScreen, find.text('Salami')), findsOneWidget);
@@ -150,7 +160,7 @@ void main() {
     'la selección para vender NO muestra productos inactivos, aunque la '
     'pestaña Productos esté mostrando inactivos',
     (tester) async {
-      await _superficieAncha(tester);
+      _superficieAncha(tester);
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(),
@@ -181,7 +191,7 @@ void main() {
       Widget pantalla, {
       Future<void> Function()? interactuar,
     }) async {
-      await _superficieAncha(tester);
+      _superficieAncha(tester);
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(),

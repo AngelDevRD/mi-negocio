@@ -14,6 +14,7 @@ import '../../../../core/widgets/app_states.dart';
 import '../../../../core/widgets/money_text.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../products/domain/entities/producto.dart';
+import '../../../products/presentation/providers/products_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/entities/venta.dart';
 import '../providers/sales_providers.dart';
@@ -48,59 +49,110 @@ Future<void> agregarProductoAlCarrito(
       .where((i) => i.productoId == producto.id)
       .fold<double>(0, (suma, i) => suma + i.cantidad);
 
-  if (producto.stockActual - (enCarrito + item.cantidad) < 0) {
-    final disponible = formatoCantidadUnidad(
-      producto.stockActual,
-      producto.unidad,
-    );
-    if (!await _permitirStockNegativo(ref)) {
-      if (!context.mounted) return;
-      // RN-12: sin permiso del Administrador no se puede continuar.
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Stock insuficiente'),
-          content: Text(
-            'No hay suficiente stock de ${producto.nombre} (disponible: '
-            '$disponible). Un administrador puede permitir vender sin stock '
-            'en Ajustes.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    if (!context.mounted) return;
-    final continuar = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Stock insuficiente'),
-        content: Text(
-          '"${producto.nombre}" tiene $disponible en existencia. '
-          '¿Continuar de todos modos?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continuar'),
-          ),
-        ],
-      ),
-    );
-    if (continuar != true) return;
+  if (!await _confirmarStock(
+    context,
+    ref,
+    producto,
+    enCarrito + item.cantidad,
+  )) {
+    return;
   }
   if (!context.mounted) return;
 
   ref.read(carritoVentaProvider.notifier).agregarItem(item);
+}
+
+/// RN-12: comprueba que [cantidadTotal] del [producto] (todo lo que habrá en
+/// el carrito tras el cambio) no supere la existencia. Devuelve `true` si el
+/// cambio puede aplicarse:
+/// - stock suficiente: sí, sin preguntar;
+/// - stock insuficiente y ajuste permitido: advertencia con Continuar/Cancelar;
+/// - stock insuficiente y ajuste NO permitido: aviso informativo y `false`.
+/// La usan igual agregar un producto, el botón + y la edición de cantidad.
+Future<bool> _confirmarStock(
+  BuildContext context,
+  WidgetRef ref,
+  Producto producto,
+  double cantidadTotal,
+) async {
+  if (producto.stockActual - cantidadTotal >= 0) return true;
+
+  final disponible = formatoCantidadUnidad(
+    producto.stockActual,
+    producto.unidad,
+  );
+  if (!await _permitirStockNegativo(ref)) {
+    if (!context.mounted) return false;
+    // RN-12: sin permiso del Administrador no se puede continuar.
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Stock insuficiente'),
+        content: Text(
+          'No hay suficiente stock de ${producto.nombre} (disponible: '
+          '$disponible). Un administrador puede permitir vender sin stock '
+          'en Ajustes.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+  if (!context.mounted) return false;
+  final continuar = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Stock insuficiente'),
+      content: Text(
+        '"${producto.nombre}" tiene $disponible en existencia. '
+        '¿Continuar de todos modos?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Continuar'),
+        ),
+      ],
+    ),
+  );
+  return continuar == true;
+}
+
+/// Aumento de la cantidad de una línea del carrito (botón + o edición):
+/// aplica RN-12 con [_confirmarStock] sobre el total del producto tras el
+/// cambio. Devuelve `true` si el cambio puede aplicarse. Disminuir nunca pasa
+/// por aquí.
+Future<bool> _confirmarAumento(
+  BuildContext context,
+  WidgetRef ref,
+  ItemVentaInput linea,
+  double nuevaCantidad,
+) async {
+  final enCarrito = ref
+      .read(carritoVentaProvider)
+      .items
+      .where((i) => i.productoId == linea.productoId)
+      .fold<double>(0, (suma, i) => suma + i.cantidad);
+  final total = enCarrito - linea.cantidad + nuevaCantidad;
+
+  final Producto? producto;
+  try {
+    producto = await ref.read(productoProvider(linea.productoId).future);
+  } catch (_) {
+    // No se pudo leer: la transacción de la venta sigue siendo la defensa.
+    return true;
+  }
+  if (producto == null || !context.mounted) return producto == null;
+  return _confirmarStock(context, ref, producto, total);
 }
 
 /// Ajuste RN-12 leído al agregar. Si no se puede leer se asume "permitido":
@@ -454,12 +506,35 @@ class _CarritoPanelState extends ConsumerState<CarritoPanel> {
     super.dispose();
   }
 
+  /// Aumenta una línea en 1 (botón +) si RN-12 lo permite.
+  Future<void> _aumentar(int indice, ItemVentaInput item) async {
+    final nueva = item.cantidad + 1;
+    if (!await _confirmarAumento(context, ref, item, nueva)) return;
+    if (!_lineaSigue(indice, item)) return;
+    ref.read(carritoVentaProvider.notifier).actualizarCantidad(indice, nueva);
+  }
+
+  /// La línea no cambió de sitio mientras esperaba un diálogo.
+  bool _lineaSigue(int indice, ItemVentaInput item) {
+    final items = ref.read(carritoVentaProvider).items;
+    return mounted &&
+        indice < items.length &&
+        items[indice].productoId == item.productoId;
+  }
+
   Future<void> _editar(int indice, ItemVentaInput item, bool esAdmin) async {
     final actualizado = await showDialog<ItemVentaInput>(
       context: context,
       builder: (_) => EditarLineaDialog(item: item, esAdmin: esAdmin),
     );
-    if (actualizado == null) return;
+    if (actualizado == null || !mounted) return;
+    // Si la edición AUMENTA la cantidad, aplica RN-12; cancelar no aplica
+    // ningún cambio (tampoco el de precio).
+    if (actualizado.cantidad > item.cantidad &&
+        !await _confirmarAumento(context, ref, item, actualizado.cantidad)) {
+      return;
+    }
+    if (!_lineaSigue(indice, item)) return;
     final controller = ref.read(carritoVentaProvider.notifier);
     controller.actualizarCantidad(indice, actualizado.cantidad);
     // Solo el Administrador puede cambiar el precio de una línea.
@@ -509,8 +584,7 @@ class _CarritoPanelState extends ConsumerState<CarritoPanel> {
                 onMenos: () => item.cantidad <= 1
                     ? controller.quitarItem(i)
                     : controller.actualizarCantidad(i, item.cantidad - 1),
-                onMas: () =>
-                    controller.actualizarCantidad(i, item.cantidad + 1),
+                onMas: () => _aumentar(i, item),
                 onQuitar: () => controller.quitarItem(i),
               );
             },

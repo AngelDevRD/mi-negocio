@@ -45,6 +45,9 @@ Future<GoRouter> _montar(WidgetTester tester, {required double ancho}) async {
   addTearDown(router.dispose);
   await tester.pumpWidget(MaterialApp.router(routerConfig: router));
   await tester.pumpAndSettle();
+  // AppShell decide por LayoutBuilder (constraints), no por MediaQuery:
+  // setSurfaceSize sí cambia ese ancho. Se comprueba el que ve el widget.
+  expect(tester.getSize(find.byType(AppShell)).width, ancho);
   return router;
 }
 

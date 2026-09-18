@@ -44,6 +44,9 @@ Future<_AuthFalso> _montar(WidgetTester tester, RolUsuario rol) async {
     ),
   );
   await tester.pumpAndSettle();
+  // MoreScreen no decide por ancho: solo importa el ALTO de las
+  // restricciones (ListView perezosa). Se comprueba el que ve la pantalla.
+  expect(tester.getSize(find.byType(MoreScreen)), const Size(500, 3000));
   return auth;
 }
 

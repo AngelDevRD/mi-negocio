@@ -109,6 +109,9 @@ void main() {
         );
         await tester.pump();
 
+        // EmptyState no decide por ancho: lo que importa es el ALTO de las
+        // restricciones (el LayoutBuilder/scroll), que setSurfaceSize sí fija.
+        expect(tester.getSize(find.byType(Scaffold)), const Size(640, 300));
         expect(tester.takeException(), isNull);
         expect(find.byType(SingleChildScrollView), findsOneWidget);
       },

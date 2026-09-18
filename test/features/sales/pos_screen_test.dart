@@ -49,6 +49,10 @@ class _ProductosFalsos implements ProductsRepository {
   }
 
   @override
+  Future<Producto?> obtenerProducto(String id) async =>
+      productos.where((p) => p.id == id).firstOrNull;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -459,7 +463,9 @@ void main() {
 
       expect(find.text('Stock insuficiente'), findsOneWidget);
       expect(
-        find.text('"Arroz" tiene 2 unidades en existencia. ¿Continuar de todos modos?'),
+        find.text(
+          '"Arroz" tiene 2 unidades en existencia. ¿Continuar de todos modos?',
+        ),
         findsOneWidget,
       );
       expect(find.text('Continuar'), findsOneWidget);
@@ -496,20 +502,21 @@ void main() {
       expect(find.text('Stock bajo: 2'), findsOneWidget);
     });
 
-    testWidgets('ajuste NO permitido pero con stock suficiente: agrega normal', (
-      tester,
-    ) async {
-      await _montar(
-        tester,
-        productos: [_producto('Arroz', stock: 20)],
-        permitirStock: false,
-      );
+    testWidgets(
+      'ajuste NO permitido pero con stock suficiente: agrega normal',
+      (tester) async {
+        await _montar(
+          tester,
+          productos: [_producto('Arroz', stock: 20)],
+          permitirStock: false,
+        );
 
-      await _agregar(tester, 'Arroz', cantidad: '5');
+        await _agregar(tester, 'Arroz', cantidad: '5');
 
-      expect(find.text('Stock insuficiente'), findsNothing);
-      expect(find.text('Toca un producto para agregarlo'), findsNothing);
-    });
+        expect(find.text('Stock insuficiente'), findsNothing);
+        expect(find.text('Toca un producto para agregarlo'), findsNothing);
+      },
+    );
 
     testWidgets('ajuste NO permitido: cuenta lo que ya está en el carrito', (
       tester,
@@ -525,6 +532,177 @@ void main() {
 
       expect(find.text('Stock insuficiente'), findsOneWidget);
       expect(find.text('Continuar'), findsNothing);
+    });
+  });
+
+  group('RN-12 al editar el carrito', () {
+    // Arroz: 2 en existencia, RD$ 150.00 c/u; se agregan 2 (justo el stock).
+    Future<void> conDosEnCarrito(
+      WidgetTester tester, {
+      bool permitirStock = true,
+      RolUsuario rol = RolUsuario.cajero,
+    }) async {
+      await _montar(
+        tester,
+        rol: rol,
+        productos: [_producto('Arroz', stock: 2, minimo: 0)],
+        permitirStock: permitirStock,
+      );
+      await _agregar(tester, 'Arroz', cantidad: '2');
+      expect(find.text('Stock insuficiente'), findsNothing);
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    }
+
+    Future<void> editarCantidad(WidgetTester tester, String cantidad) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(LineaCarrito),
+          matching: find.byType(TextButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Cantidad'),
+        cantidad,
+      );
+      await tester.tap(find.text('Guardar'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('+ que supera el stock (permitido): advierte; Cancelar no '
+        'cambia la cantidad; Continuar la sube', (tester) async {
+      await conDosEnCarrito(tester);
+
+      await tester.tap(find.byTooltip('Agregar uno'));
+      await tester.pumpAndSettle();
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(find.text('Continuar'), findsOneWidget);
+      expect(find.text('Cancelar'), findsOneWidget);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+
+      await tester.tap(find.byTooltip('Agregar uno'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 450.00'), findsNWidgets(2));
+    });
+
+    testWidgets('+ que supera el stock (NO permitido): "Entendido" y la '
+        'cantidad no cambia', (tester) async {
+      await conDosEnCarrito(tester, permitirStock: false);
+
+      await tester.tap(find.byTooltip('Agregar uno'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(find.text('Continuar'), findsNothing);
+      expect(find.text('Cancelar'), findsNothing);
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    });
+
+    testWidgets('+ dentro del stock no pregunta', (tester) async {
+      await _montar(
+        tester,
+        productos: [_producto('Arroz', stock: 5, minimo: 0)],
+        permitirStock: false,
+      );
+      await _agregar(tester, 'Arroz', cantidad: '2');
+
+      await tester.tap(find.byTooltip('Agregar uno'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stock insuficiente'), findsNothing);
+      expect(_enCarrito('RD\$ 450.00'), findsNWidgets(2));
+    });
+
+    testWidgets('editar la cantidad hacia arriba aplica la misma regla '
+        '(permitido: Cancelar no aplica, Continuar sí)', (tester) async {
+      await conDosEnCarrito(tester);
+
+      await editarCantidad(tester, '5');
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+
+      await editarCantidad(tester, '5');
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 750.00'), findsNWidgets(2));
+    });
+
+    testWidgets('editar la cantidad hacia arriba (NO permitido): '
+        '"Entendido" y no se aplica', (tester) async {
+      await conDosEnCarrito(tester, permitirStock: false);
+
+      await editarCantidad(tester, '5');
+
+      expect(find.text('Continuar'), findsNothing);
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    });
+
+    testWidgets('cancelar la advertencia tampoco aplica el cambio de precio '
+        'hecho en la misma edición (administrador)', (tester) async {
+      await conDosEnCarrito(tester, rol: RolUsuario.administrador);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(LineaCarrito),
+          matching: find.byType(TextButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Cantidad'),
+        '5',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Precio unitario'),
+        '200',
+      );
+      await tester.tap(find.text('Guardar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(_enCarrito('RD\$ 150.00 c/u'), findsOneWidget);
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    });
+
+    testWidgets('editar hacia abajo o sin superar el stock no pregunta', (
+      tester,
+    ) async {
+      await conDosEnCarrito(tester, permitirStock: false);
+
+      await editarCantidad(tester, '1');
+
+      expect(find.text('Stock insuficiente'), findsNothing);
+      expect(_enCarrito('RD\$ 150.00'), findsNWidgets(2));
+    });
+
+    testWidgets('- NUNCA pregunta, aunque el carrito ya supere el stock', (
+      tester,
+    ) async {
+      await conDosEnCarrito(tester);
+      // Se sube a 3 con confirmación (supera el stock de 2).
+      await tester.tap(find.byTooltip('Agregar uno'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(_enCarrito('RD\$ 450.00'), findsNWidgets(2));
+
+      await tester.tap(find.byTooltip('Quitar uno'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
     });
   });
 

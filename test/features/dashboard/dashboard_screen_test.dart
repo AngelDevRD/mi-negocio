@@ -74,8 +74,12 @@ List<Override> _overrides({
   movimientosRecientesProvider.overrideWith((ref) => Stream.value(const [])),
 ];
 
-Future<void> _montar(WidgetTester tester, List<Override> overrides) async {
-  await tester.binding.setSurfaceSize(const Size(500, 2400));
+Future<void> _montar(
+  WidgetTester tester,
+  List<Override> overrides, {
+  Size tamano = const Size(500, 2400),
+}) async {
+  await tester.binding.setSurfaceSize(tamano);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   Widget destino(String texto) => Scaffold(body: Center(child: Text(texto)));
@@ -100,6 +104,9 @@ Future<void> _montar(WidgetTester tester, List<Override> overrides) async {
     ),
   );
   await tester.pumpAndSettle();
+  // El Inicio decide por LayoutBuilder (constraints), no por MediaQuery:
+  // setSurfaceSize sí cambia ese ancho. Se comprueba el que ve la pantalla.
+  expect(tester.getSize(find.byType(DashboardScreen)), tamano);
 }
 
 /// Etiquetas de los botones SÓLIDOS (FilledButton no tonal): la acción
@@ -195,6 +202,43 @@ void main() {
 
       expect(find.text('Ganancia bruta del mes'), findsOneWidget);
       expect(find.text(const Money(300000).format()), findsOneWidget);
+    });
+  });
+
+  group('distribución según el ancho (LayoutBuilder)', () {
+    double y(WidgetTester tester, String texto) =>
+        tester.getTopLeft(find.text(texto)).dy;
+
+    testWidgets('500 px: indicadores en 2 columnas y listas apiladas', (
+      tester,
+    ) async {
+      await _montar(tester, _overrides(rol: RolUsuario.cajero));
+
+      // 3 indicadores en 2 columnas: el tercero baja a la fila siguiente.
+      expect(y(tester, 'Ventas del mes'), y(tester, 'Compras del mes'));
+      expect(y(tester, 'Gastos del mes'), greaterThan(y(tester, 'Ventas del mes')));
+      // Inventario bajo encima de Últimos movimientos.
+      expect(
+        y(tester, 'Últimos movimientos'),
+        greaterThan(y(tester, 'Inventario bajo')),
+      );
+    });
+
+    testWidgets('1000 px: indicadores en una fila y listas lado a lado', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        _overrides(rol: RolUsuario.cajero),
+        tamano: const Size(1000, 1600),
+      );
+
+      expect(y(tester, 'Gastos del mes'), y(tester, 'Ventas del mes'));
+      expect(y(tester, 'Últimos movimientos'), y(tester, 'Inventario bajo'));
+      expect(
+        tester.getTopLeft(find.text('Últimos movimientos')).dx,
+        greaterThan(tester.getTopLeft(find.text('Inventario bajo')).dx),
+      );
     });
   });
 

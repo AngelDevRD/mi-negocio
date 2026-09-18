@@ -45,6 +45,9 @@ void main() {
         ),
       );
       await tester.pump();
+      // No hay lógica por ancho: solo importa el ALTO de las restricciones
+      // (la ListView perezosa construye el campo Salario).
+      expect(tester.getSize(find.byType(EmployeeFormScreen)).height, 1400);
 
       // Orden de campos en el formulario: Nombre, Cédula, Dirección,
       // Teléfono, Salario.
