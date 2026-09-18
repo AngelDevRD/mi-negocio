@@ -22,6 +22,7 @@ import 'package:app_gestion/features/purchases/domain/entities/compra.dart';
 import 'package:app_gestion/features/sales/data/datasources/sales_local_datasource.dart';
 import 'package:app_gestion/features/sales/data/repositories/sales_repository_impl.dart';
 import 'package:app_gestion/features/sales/domain/entities/venta.dart';
+import 'package:app_gestion/features/settings/data/datasources/settings_local_datasource.dart';
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -199,7 +200,10 @@ Future<BaseDemo> crearBaseDemo({
 Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   final productos = ProductsRepositoryImpl(ProductsLocalDatasource(db));
   final compras = PurchasesRepositoryImpl(PurchasesLocalDatasource(db));
-  final ventas = SalesRepositoryImpl(SalesLocalDatasource(db));
+  final ventas = SalesRepositoryImpl(
+    SalesLocalDatasource(db),
+    SettingsLocalDatasource(db),
+  );
   final gastos = ExpensesRepositoryImpl(ExpensesLocalDatasource(db));
 
   Future<String> categoria(String nombre) async =>

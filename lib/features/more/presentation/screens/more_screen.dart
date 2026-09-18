@@ -161,6 +161,13 @@ class MoreScreen extends ConsumerWidget {
               descripcion: 'Datos del negocio y estado de tu licencia.',
               onTap: () => context.push(AppRoutes.perfil),
             ),
+          if (esAdmin)
+            _ItemModulo(
+              icono: Icons.tune_outlined,
+              titulo: 'Ajustes del negocio',
+              descripcion: 'Reglas de operación, como vender sin stock.',
+              onTap: () => context.push(AppRoutes.ajustes),
+            ),
           _ItemModulo(
             icono: Icons.logout,
             titulo: 'Cerrar sesión',

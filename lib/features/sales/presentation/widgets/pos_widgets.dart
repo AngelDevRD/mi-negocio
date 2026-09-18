@@ -14,6 +14,7 @@ import '../../../../core/widgets/app_states.dart';
 import '../../../../core/widgets/money_text.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../products/domain/entities/producto.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/entities/venta.dart';
 import '../providers/sales_providers.dart';
 
@@ -48,13 +49,40 @@ Future<void> agregarProductoAlCarrito(
       .fold<double>(0, (suma, i) => suma + i.cantidad);
 
   if (producto.stockActual - (enCarrito + item.cantidad) < 0) {
+    final disponible = formatoCantidadUnidad(
+      producto.stockActual,
+      producto.unidad,
+    );
+    if (!await _permitirStockNegativo(ref)) {
+      if (!context.mounted) return;
+      // RN-12: sin permiso del Administrador no se puede continuar.
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Stock insuficiente'),
+          content: Text(
+            'No hay suficiente stock de ${producto.nombre} (disponible: '
+            '$disponible). Un administrador puede permitir vender sin stock '
+            'en Ajustes.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
     final continuar = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Stock insuficiente'),
         content: Text(
-          '"${producto.nombre}" tiene ${producto.stockActual.toStringAsFixed(2)} '
-          '${producto.unidad} en existencia. ¿Continuar de todos modos?',
+          '"${producto.nombre}" tiene $disponible en existencia. '
+          '¿Continuar de todos modos?',
         ),
         actions: [
           TextButton(
@@ -73,6 +101,16 @@ Future<void> agregarProductoAlCarrito(
   if (!context.mounted) return;
 
   ref.read(carritoVentaProvider.notifier).agregarItem(item);
+}
+
+/// Ajuste RN-12 leído al agregar. Si no se puede leer se asume "permitido":
+/// la regla real la aplica la transacción de la venta.
+Future<bool> _permitirStockNegativo(WidgetRef ref) async {
+  try {
+    return await ref.read(permitirStockNegativoProvider.future);
+  } catch (_) {
+    return true;
+  }
 }
 
 /// Cobra el carrito: pide el monto recibido, registra la venta y limpia el

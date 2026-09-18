@@ -108,7 +108,13 @@ void main() {
   group('cajero', () {
     final sesion = SesionActiva(_usuario(RolUsuario.cajero));
 
-    for (final ruta in ['/empleados', '/analisis', '/usuarios', '/auditoria']) {
+    for (final ruta in [
+      '/empleados',
+      '/analisis',
+      '/usuarios',
+      '/auditoria',
+      AppRoutes.ajustes,
+    ]) {
       testWidgets('$ruta termina en /', (tester) async {
         expect(await _resolver(tester, ruta, sesion: sesion), '/');
       });
@@ -126,7 +132,7 @@ void main() {
   group('administrador', () {
     final sesion = SesionActiva(_usuario(RolUsuario.administrador));
 
-    for (final ruta in ['/empleados', '/analisis', '/mas']) {
+    for (final ruta in ['/empleados', '/analisis', '/mas', AppRoutes.ajustes]) {
       testWidgets('$ruta es accesible', (tester) async {
         expect(await _resolver(tester, ruta, sesion: sesion), ruta);
       });

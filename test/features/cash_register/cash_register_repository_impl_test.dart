@@ -7,6 +7,7 @@ import 'package:app_gestion/features/cash_register/data/repositories/cash_regist
 import 'package:app_gestion/features/sales/data/datasources/sales_local_datasource.dart';
 import 'package:app_gestion/features/sales/data/repositories/sales_repository_impl.dart';
 import 'package:app_gestion/features/sales/domain/entities/venta.dart';
+import 'package:app_gestion/features/settings/data/datasources/settings_local_datasource.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +22,10 @@ void main() {
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     repo = CashRegisterRepositoryImpl(CashRegisterLocalDatasource(db));
-    salesRepo = SalesRepositoryImpl(SalesLocalDatasource(db));
+    salesRepo = SalesRepositoryImpl(
+      SalesLocalDatasource(db),
+      SettingsLocalDatasource(db),
+    );
 
     final negocioId = generateUuidV4();
     await db

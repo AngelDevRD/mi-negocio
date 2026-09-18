@@ -3,14 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/app_database.dart' hide Venta, VentaItem;
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
+import '../../../settings/data/datasources/settings_local_datasource.dart';
 import '../../data/datasources/sales_local_datasource.dart';
 import '../../data/repositories/sales_repository_impl.dart';
 import '../../domain/entities/venta.dart';
 import '../../domain/repositories/sales_repository.dart';
 
 final salesRepositoryProvider = Provider<SalesRepository>((ref) {
+  final db = ref.watch(appDatabaseProvider);
   return SalesRepositoryImpl(
-    SalesLocalDatasource(ref.watch(appDatabaseProvider)),
+    SalesLocalDatasource(db),
+    SettingsLocalDatasource(db),
   );
 });
 

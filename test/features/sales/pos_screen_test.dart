@@ -19,6 +19,7 @@ import 'package:app_gestion/features/sales/presentation/screens/pos_screen.dart'
 import 'package:app_gestion/features/sales/presentation/screens/sales_list_screen.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/abrir_caja_dialog.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/pos_widgets.dart';
+import 'package:app_gestion/features/settings/presentation/providers/settings_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -170,6 +171,7 @@ Future<_Escenario> _montar(
   RolUsuario rol = RolUsuario.cajero,
   List<Producto>? productos,
   bool cajaAbierta = true,
+  bool permitirStock = true,
   Widget home = const PosScreen(),
 }) async {
   _fijarTamano(tester, tamano);
@@ -184,6 +186,9 @@ Future<_Escenario> _montar(
       (ref) => Stream.value(cajaAbierta ? _caja : null),
     ),
     authControllerProvider.overrideWith(() => _AuthFalso(rol)),
+    permitirStockNegativoProvider.overrideWith(
+      (ref) => Stream.value(permitirStock),
+    ),
   ];
 
   await tester.pumpWidget(
@@ -441,6 +446,85 @@ void main() {
       await _montar(tester);
 
       expect(tester.widget<FilledButton>(_boton('Cobrar')).onPressed, isNull);
+    });
+  });
+
+  group('RN-12 en el POS', () {
+    testWidgets('ajuste permitido: advierte y deja continuar (con unidades)', (
+      tester,
+    ) async {
+      await _montar(tester, productos: [_producto('Arroz', stock: 2)]);
+
+      await _agregar(tester, 'Arroz', cantidad: '5');
+
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(
+        find.text('"Arroz" tiene 2 unidades en existencia. ¿Continuar de todos modos?'),
+        findsOneWidget,
+      );
+      expect(find.text('Continuar'), findsOneWidget);
+      expect(find.text('Entendido'), findsNothing);
+    });
+
+    testWidgets('ajuste NO permitido: diálogo informativo sin "Continuar" y '
+        'la línea no se agrega', (tester) async {
+      await _montar(
+        tester,
+        productos: [_producto('Arroz', stock: 2)],
+        permitirStock: false,
+      );
+
+      await _agregar(tester, 'Arroz', cantidad: '5');
+
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(
+        find.text(
+          'No hay suficiente stock de Arroz (disponible: 2 unidades). '
+          'Un administrador puede permitir vender sin stock en Ajustes.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Continuar'), findsNothing);
+      expect(find.text('Cancelar'), findsNothing);
+
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Toca un producto para agregarlo'), findsOneWidget);
+      // La etiqueta de la tarjeta se mantiene.
+      expect(find.text('Stock bajo: 2'), findsOneWidget);
+    });
+
+    testWidgets('ajuste NO permitido pero con stock suficiente: agrega normal', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        productos: [_producto('Arroz', stock: 20)],
+        permitirStock: false,
+      );
+
+      await _agregar(tester, 'Arroz', cantidad: '5');
+
+      expect(find.text('Stock insuficiente'), findsNothing);
+      expect(find.text('Toca un producto para agregarlo'), findsNothing);
+    });
+
+    testWidgets('ajuste NO permitido: cuenta lo que ya está en el carrito', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        productos: [_producto('Arroz', stock: 10)],
+        permitirStock: false,
+      );
+
+      await _agregar(tester, 'Arroz', cantidad: '6');
+      await _agregar(tester, 'Arroz', cantidad: '6');
+
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(find.text('Continuar'), findsNothing);
     });
   });
 

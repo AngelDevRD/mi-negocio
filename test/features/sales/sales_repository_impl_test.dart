@@ -5,6 +5,7 @@ import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/sales/data/datasources/sales_local_datasource.dart';
 import 'package:app_gestion/features/sales/data/repositories/sales_repository_impl.dart';
 import 'package:app_gestion/features/sales/domain/entities/venta.dart';
+import 'package:app_gestion/features/settings/data/datasources/settings_local_datasource.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +27,7 @@ class _DatasourceQueLanzaProductoInexistente extends SalesLocalDatasource {
     String? nota,
     required String cajaSesionId,
     required String usuarioId,
+    required bool permitirStockNegativo,
   }) {
     throw ProductoInexistenteException(productoId);
   }
@@ -34,6 +36,7 @@ class _DatasourceQueLanzaProductoInexistente extends SalesLocalDatasource {
 void main() {
   late AppDatabase db;
   late SalesLocalDatasource local;
+  late SettingsLocalDatasource settings;
   late SalesRepositoryImpl repo;
   late String usuarioId;
   late String productoId;
@@ -41,7 +44,8 @@ void main() {
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     local = SalesLocalDatasource(db);
-    repo = SalesRepositoryImpl(local);
+    settings = SettingsLocalDatasource(db);
+    repo = SalesRepositoryImpl(local, settings);
 
     final negocioId = generateUuidV4();
     await db
@@ -382,6 +386,7 @@ void main() {
             ],
             cajaSesionId: cajaSesionId,
             usuarioId: usuarioId,
+            permitirStockNegativo: true,
           ),
           throwsA(isA<ProductoInexistenteException>()),
         );
@@ -414,6 +419,7 @@ void main() {
         );
         final repoConDatasourceQueLanza = SalesRepositoryImpl(
           _DatasourceQueLanzaProductoInexistente(db, productoId),
+          settings,
         );
 
         final result = await repoConDatasourceQueLanza.registrarVenta(
@@ -569,6 +575,154 @@ void main() {
         expect(movimientosCajaAnulacion.single.monto, -600);
       },
     );
+  });
+
+  group('RN-12: vender sin stock', () {
+    Future<Result<String>> vender(double cantidad) => repo.registrarVenta(
+      tipo: TipoVenta.rapida,
+      items: [
+        ItemVentaInput(
+          productoId: productoId,
+          productoNombre: 'Salami',
+          cantidad: cantidad,
+          precioUnitario: const Money(150),
+        ),
+      ],
+      usuarioId: usuarioId,
+    );
+
+    Future<double> stock() async =>
+        (await (db.select(
+          db.productos,
+        )..where((t) => t.id.equals(productoId))).getSingle()).stockActual;
+
+    Future<void> verificarNadaEscrito() async {
+      expect(await db.select(db.ventas).get(), isEmpty);
+      expect(await db.select(db.ventaItems).get(), isEmpty);
+      expect(await db.select(db.cajaMovimientos).get(), isEmpty);
+      expect(await db.select(db.movimientosInventario).get(), isEmpty);
+      expect(await stock(), 10);
+    }
+
+    test('por defecto (sin ajuste guardado) se permite y el stock queda '
+        'negativo', () async {
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+
+      final result = await vender(15);
+
+      expect(result.isOk, isTrue);
+      expect(await stock(), -5);
+    });
+
+    test('con el ajuste en true la venta pasa y el stock queda negativo', () async {
+      await settings.establecerPermitirStockNegativo(
+        true,
+        usuarioId: usuarioId,
+      );
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+
+      final result = await vender(15);
+
+      expect(result.isOk, isTrue);
+      expect(await stock(), -5);
+    });
+
+    test('con el ajuste en false y stock insuficiente: Result.fail RN-12 y '
+        'NO se escribe nada', () async {
+      await settings.establecerPermitirStockNegativo(
+        false,
+        usuarioId: usuarioId,
+      );
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+
+      final result = await vender(15);
+
+      result.when(
+        ok: (_) => fail('debió fallar por stock insuficiente'),
+        fail: (f) {
+          expect(f, isA<BusinessRuleFailure>());
+          expect((f as BusinessRuleFailure).rule, 'RN-12');
+          expect(
+            f.message,
+            'No hay suficiente stock de "Salami": disponible 10 libras, '
+            'solicitado 15 libras.',
+          );
+        },
+      );
+      await verificarNadaEscrito();
+    });
+
+    test('las líneas del mismo producto se SUMAN (6 + 6 > 10)', () async {
+      await settings.establecerPermitirStockNegativo(
+        false,
+        usuarioId: usuarioId,
+      );
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+
+      final result = await repo.registrarVenta(
+        tipo: TipoVenta.rapida,
+        items: [
+          for (var i = 0; i < 2; i++)
+            ItemVentaInput(
+              productoId: productoId,
+              productoNombre: 'Salami',
+              cantidad: 6,
+              precioUnitario: const Money(150),
+            ),
+        ],
+        usuarioId: usuarioId,
+      );
+
+      result.when(
+        ok: (_) => fail('debió fallar: 12 > 10 disponibles'),
+        fail: (f) {
+          expect((f as BusinessRuleFailure).rule, 'RN-12');
+          expect(f.message, contains('solicitado 12 libras'));
+        },
+      );
+      await verificarNadaEscrito();
+    });
+
+    test('con el ajuste en false, vender EXACTAMENTE lo disponible pasa', () async {
+      await settings.establecerPermitirStockNegativo(
+        false,
+        usuarioId: usuarioId,
+      );
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+
+      final result = await vender(10);
+
+      expect(result.isOk, isTrue);
+      expect(await stock(), 0);
+    });
+
+    test('el datasource lanza StockInsuficienteException antes de escribir '
+        '(defensa en la transacción)', () async {
+      await repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId);
+      final cajaSesionId = (await local.obtenerCajaAbiertaId())!;
+
+      await expectLater(
+        local.registrarVenta(
+          tipo: TipoVenta.rapida,
+          items: [
+            VentaItemEntrada(
+              productoId: productoId,
+              cantidad: 11,
+              precioUnitarioCents: 15000,
+            ),
+          ],
+          cajaSesionId: cajaSesionId,
+          usuarioId: usuarioId,
+          permitirStockNegativo: false,
+        ),
+        throwsA(
+          isA<StockInsuficienteException>()
+              .having((e) => e.disponible, 'disponible', 10)
+              .having((e) => e.solicitado, 'solicitado', 11),
+        ),
+      );
+      await verificarNadaEscrito();
+    });
   });
 
   group('watchVentas / obtenerVenta', () {

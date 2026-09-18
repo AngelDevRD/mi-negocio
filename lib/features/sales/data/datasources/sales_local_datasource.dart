@@ -32,6 +32,24 @@ class ProductoInexistenteException implements Exception {
   final String productoId;
 }
 
+/// Lanzada dentro de la transacción de [SalesLocalDatasource.registrarVenta]
+/// (RN-12) cuando el administrador NO permite vender sin stock y las líneas de
+/// un producto (sumadas) superan su existencia. Se lanza antes de escribir
+/// nada. El repositorio la traduce a un `BusinessRuleFailure`.
+class StockInsuficienteException implements Exception {
+  const StockInsuficienteException({
+    required this.productoId,
+    required this.unidad,
+    required this.disponible,
+    required this.solicitado,
+  });
+
+  final String productoId;
+  final String unidad;
+  final double disponible;
+  final double solicitado;
+}
+
 /// Acceso a `ventas`/`venta_items` (RF-VEN) y a la apertura mínima de
 /// `caja_sesiones` (RN-01).
 class SalesLocalDatasource {
@@ -129,6 +147,9 @@ class SalesLocalDatasource {
   /// inventario por ítem (`InventoryLocalDatasource.applyMovement`), entrada
   /// en `caja_movimientos` y auditoría.
   ///
+  /// Con [permitirStockNegativo] en `false` lanza [StockInsuficienteException]
+  /// (RN-12) si alguna línea deja el stock por debajo de cero.
+  ///
   /// Revalida dentro de la transacción que cada producto exista (RN-05): si
   /// un ítem referencia un producto inexistente/eliminado, lanza
   /// [ProductoInexistenteException] y la transacción entera se revierte, en
@@ -141,6 +162,7 @@ class SalesLocalDatasource {
     String? nota,
     required String cajaSesionId,
     required String usuarioId,
+    required bool permitirStockNegativo,
   }) {
     return _db.transaction(() async {
       final ventaId = generateUuidV4();
@@ -159,6 +181,29 @@ class SalesLocalDatasource {
         total += (item.precioUnitarioCents * item.cantidad).round();
         ganancia += ((item.precioUnitarioCents - costo) * item.cantidad)
             .round();
+      }
+
+      // RN-12: sin permiso para stock negativo, la existencia se revalida aquí
+      // (no solo en la UI), sumando las líneas del mismo producto y ANTES de
+      // escribir nada.
+      if (!permitirStockNegativo) {
+        final solicitado = <String, double>{};
+        for (final item in items) {
+          solicitado[item.productoId] =
+              (solicitado[item.productoId] ?? 0) + item.cantidad;
+        }
+        for (final entrada in solicitado.entries) {
+          final producto = productos[entrada.key]!;
+          // Tolerancia: sumas como 0.1 + 0.2 no deben rechazar un 0.3 exacto.
+          if (producto.stockActual - entrada.value < -1e-9) {
+            throw StockInsuficienteException(
+              productoId: entrada.key,
+              unidad: producto.unidad,
+              disponible: producto.stockActual,
+              solicitado: entrada.value,
+            );
+          }
+        }
       }
 
       await _db
@@ -398,11 +443,12 @@ class SalesLocalDatasource {
       // Tolerante a más de una sesión abierta preexistente (ver
       // obtenerCajaAbiertaId): `limit(1)` acota la fila para que
       // `getSingleOrNull` nunca lance `StateError` dentro de la transacción.
-      final existente = await (_db.select(_db.cajaSesiones)
-            ..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta))
-            ..orderBy([(t) => OrderingTerm.desc(t.fechaApertura)])
-            ..limit(1))
-          .getSingleOrNull();
+      final existente =
+          await (_db.select(_db.cajaSesiones)
+                ..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta))
+                ..orderBy([(t) => OrderingTerm.desc(t.fechaApertura)])
+                ..limit(1))
+              .getSingleOrNull();
       if (existente != null) {
         return false;
       }

@@ -79,6 +79,7 @@ void main() {
         'Importar datos',
         'Respaldo',
         'Perfil y suscripción',
+        'Ajustes del negocio',
       ]) {
         expect(find.text(texto), findsNothing, reason: texto);
       }
@@ -109,6 +110,7 @@ void main() {
         'Respaldo',
         'Cuenta',
         'Perfil y suscripción',
+        'Ajustes del negocio',
         'Cerrar sesión',
       ]) {
         expect(find.text(texto), findsOneWidget, reason: texto);

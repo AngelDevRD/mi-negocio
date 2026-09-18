@@ -42,6 +42,7 @@ import '../../features/purchases/presentation/screens/purchases_list_screen.dart
 import '../../features/sales/presentation/screens/pos_screen.dart';
 import '../../features/sales/presentation/screens/sale_detail_screen.dart';
 import '../../features/sales/presentation/screens/sales_list_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../database/enums.dart';
 import '../widgets/app_shell.dart';
 
@@ -77,6 +78,7 @@ abstract final class AppRoutes {
   static const String respaldo = '/respaldo';
   static const String perfil = '/perfil';
   static const String asistente = '/asistente';
+  static const String ajustes = '/ajustes';
 
   /// Hub "Más": accesible para ambos roles (los módulos que lista aplican
   /// sus propios permisos).
@@ -94,6 +96,7 @@ const _rutasSoloAdmin = {
   AppRoutes.respaldo,
   AppRoutes.perfil,
   AppRoutes.asistente,
+  AppRoutes.ajustes,
 };
 
 /// RF-INV-03/RN-19: el ajuste manual de inventario es solo para Administrador.
@@ -381,6 +384,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.asistente,
         builder: (context, state) => const AiChatScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.ajustes,
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );

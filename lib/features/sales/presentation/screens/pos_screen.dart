@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_states.dart';
 import '../../../dashboard/presentation/providers/dashboard_providers.dart';
 import '../../../products/presentation/providers/products_providers.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 import '../providers/sales_providers.dart';
 import '../widgets/abrir_caja_dialog.dart';
 import '../widgets/pos_widgets.dart';
@@ -42,6 +43,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   @override
   Widget build(BuildContext context) {
     final cajaAsync = ref.watch(cajaActualProvider);
+    // Se mantiene resuelto el ajuste RN-12 (vender sin stock) para que el aviso
+    // de stock insuficiente no espere a leerlo al agregar un producto.
+    ref.watch(permitirStockNegativoProvider);
     final hayItems = ref.watch(
       carritoVentaProvider.select((c) => c.items.isNotEmpty),
     );

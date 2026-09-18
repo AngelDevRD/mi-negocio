@@ -248,6 +248,39 @@ void main() {
     );
   });
 
+  testWidgets('teléfono · administrador · ajustes y venta sin stock', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · ajustes y venta sin stock',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.ir('/mas');
+        await sesion.capturar('admin_mas_ajustes');
+
+        await sesion.ir('/ajustes', apilar: true);
+        await sesion.capturar('ajustes');
+
+        // Se desactiva "Permitir vender sin stock" (se guarda al instante).
+        await sesion.tocarTexto('Permitir vender sin stock');
+        await sesion.capturar('ajustes_desactivado');
+
+        // El detergente tiene 2 unidades: la tercera agregada ya no cabe.
+        await sesion.ir('/ventas/rapida', apilar: true);
+        for (var i = 0; i < 3; i++) {
+          await sesion.tocarTexto('Detergente en polvo 1 kg');
+          await sesion.tocarTexto('Agregar');
+        }
+        await sesion.capturar('pos_stock_bloqueado');
+        await sesion.tocarTexto('Entendido');
+      },
+    );
+  });
+
   // Al final a propósito: un desmontaje abortado deja observers huérfanos que
   // no deben contaminar a otros escenarios.
   testWidgets('teléfono · administrador · pantallas apiladas', (tester) async {

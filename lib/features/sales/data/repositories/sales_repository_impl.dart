@@ -1,7 +1,9 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/enums.dart';
 import '../../../../core/errors/result.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
+import '../../../settings/data/datasources/settings_local_datasource.dart';
 import '../../domain/entities/venta.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../datasources/sales_local_datasource.dart';
@@ -9,9 +11,10 @@ import '../datasources/sales_local_datasource.dart';
 /// Implementación de ventas (RF-VEN): registro, anulación y apertura mínima
 /// de caja (RN-01).
 class SalesRepositoryImpl implements SalesRepository {
-  SalesRepositoryImpl(this._local);
+  SalesRepositoryImpl(this._local, this._settings);
 
   final SalesLocalDatasource _local;
+  final SettingsLocalDatasource _settings;
 
   VentaItem _itemAEntidad((db.VentaItem, String) row) {
     final (item, productoNombre) = row;
@@ -107,6 +110,10 @@ class SalesRepositoryImpl implements SalesRepository {
       );
     }
 
+    // RN-12: el ajuste se lee aquí y la regla se aplica dentro de la
+    // transacción del datasource.
+    final permitirStockNegativo = await _settings.permitirStockNegativo();
+
     try {
       final ventaId = await _local.registrarVenta(
         tipo: tipo,
@@ -122,8 +129,19 @@ class SalesRepositoryImpl implements SalesRepository {
         nota: nota,
         cajaSesionId: cajaSesionId,
         usuarioId: usuarioId,
+        permitirStockNegativo: permitirStockNegativo,
       );
       return Result.ok(ventaId);
+    } on StockInsuficienteException catch (e) {
+      final item = items.firstWhere((i) => i.productoId == e.productoId);
+      return Result.fail(
+        BusinessRuleFailure(
+          'No hay suficiente stock de "${item.productoNombre}": disponible '
+          '${formatoCantidadUnidad(e.disponible, e.unidad)}, solicitado '
+          '${formatoCantidadUnidad(e.solicitado, e.unidad)}.',
+          rule: 'RN-12',
+        ),
+      );
     } on ProductoInexistenteException catch (e) {
       // RN-05: el datasource revalidó dentro de la transacción y la
       // revirtió por completo (defensa contra un producto eliminado entre

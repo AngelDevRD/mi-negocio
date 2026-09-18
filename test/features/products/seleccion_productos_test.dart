@@ -9,6 +9,7 @@ import 'package:app_gestion/features/products/domain/repositories/products_repos
 import 'package:app_gestion/features/products/presentation/providers/products_providers.dart';
 import 'package:app_gestion/features/products/presentation/screens/products_list_screen.dart';
 import 'package:app_gestion/features/sales/presentation/screens/pos_screen.dart';
+import 'package:app_gestion/features/settings/presentation/providers/settings_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -87,6 +88,7 @@ List<Override> _overrides() => [
   ),
   cajaActualProvider.overrideWith((ref) => Stream.value(_caja)),
   authControllerProvider.overrideWith(_AuthFalso.new),
+  permitirStockNegativoProvider.overrideWith((ref) => Stream.value(true)),
 ];
 
 Future<void> _superficieAncha(WidgetTester tester) async {
