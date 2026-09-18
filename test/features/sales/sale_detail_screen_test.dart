@@ -81,4 +81,80 @@ void main() {
     expect(find.text('Método de pago'), findsOneWidget);
     expect(find.text('Efectivo'), findsOneWidget);
   });
+
+  group('diálogo de anulación según el método de pago', () {
+    Future<void> abrirDialogo(WidgetTester tester, Venta venta) async {
+      await _montar(tester, venta);
+      await tester.ensureVisible(find.text('Anular venta'));
+      await tester.tap(find.text('Anular venta'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('efectivo: menciona el movimiento de caja (como antes)', (
+      tester,
+    ) async {
+      await abrirDialogo(tester, _venta(metodoPago: MetodoPago.efectivo));
+
+      expect(
+        find.textContaining(
+          'revertirá el stock de los productos y el '
+          'movimiento de caja asociado',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('no afecta el efectivo'), findsNothing);
+    });
+
+    testWidgets('una venta histórica (sin método) se trata como efectivo', (
+      tester,
+    ) async {
+      await abrirDialogo(tester, _venta());
+
+      expect(
+        find.textContaining('movimiento de caja asociado'),
+        findsOneWidget,
+      );
+    });
+
+    for (final entrada in {
+      MetodoPago.tarjeta: 'tarjeta',
+      MetodoPago.transferencia: 'transferencia',
+    }.entries) {
+      testWidgets(
+        '${entrada.value}: dice que no afecta el efectivo de la caja',
+        (tester) async {
+          await abrirDialogo(tester, _venta(metodoPago: entrada.key));
+
+          expect(
+            find.textContaining(
+              'Esta venta se cobró con ${entrada.value}: no '
+              'afecta el efectivo de la caja.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('movimiento de caja asociado'),
+            findsNothing,
+          );
+        },
+      );
+    }
+
+    testWidgets('el botón de confirmar es destructivo (color de error)', (
+      tester,
+    ) async {
+      await abrirDialogo(tester, _venta(metodoPago: MetodoPago.tarjeta));
+
+      final boton = tester.widget<FilledButton>(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Anular'),
+        ),
+      );
+      final esquema = Theme.of(
+        tester.element(find.byType(AlertDialog)),
+      ).colorScheme;
+      expect(boton.style?.backgroundColor?.resolve({}), esquema.error);
+    });
+  });
 }

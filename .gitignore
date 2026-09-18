@@ -46,3 +46,6 @@ app.*.map.json
 
 # Salida de goldens visuales que no coinciden (no se versiona)
 test_visual/failures/
+
+# Estado local del CLI de Supabase (ref del proyecto, pooler): no se versiona
+supabase/.temp/

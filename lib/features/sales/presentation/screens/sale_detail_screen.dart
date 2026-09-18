@@ -4,9 +4,25 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
+
+/// Texto del diálogo de anulación según cómo se cobró la venta: solo lo cobrado
+/// en efectivo tiene movimiento de caja que revertir.
+String mensajeAnulacion(MetodoPago metodo) {
+  const cierre =
+      'La venta quedará marcada como anulada y no podrá deshacerse. '
+      '¿Deseas continuar?';
+  if (metodo == MetodoPago.efectivo) {
+    return 'Esta acción revertirá el stock de los productos y el movimiento '
+        'de caja asociado. $cierre';
+  }
+  return 'Esta acción revertirá el stock de los productos. Esta venta se '
+      'cobró con ${metodo.etiqueta.toLowerCase()}: no afecta el efectivo de '
+      'la caja. $cierre';
+}
 
 /// Detalle de una venta (RF-VEN): ítems, total, ganancia (solo admin) y
 /// anulación (RF-VEN/RN-10, solo Administrador).
@@ -26,29 +42,16 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
     BuildContext context,
     WidgetRef ref,
     String usuarioId,
+    MetodoPago metodo,
   ) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Anular venta'),
-        content: const Text(
-          'Esta acción revertirá el stock de los productos y el movimiento '
-          'de caja asociado. La venta quedará marcada como anulada y no '
-          'podrá deshacerse. ¿Deseas continuar?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Anular'),
-          ),
-        ],
-      ),
+    final confirmar = await mostrarConfirmacion(
+      context,
+      titulo: 'Anular venta',
+      mensaje: mensajeAnulacion(metodo),
+      confirmarLabel: 'Anular',
+      destructivo: true,
     );
-    if (confirmar != true) return;
+    if (!confirmar) return;
 
     setState(() => _guardando = true);
     final resultado = await ref
@@ -197,7 +200,12 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
                 OutlinedButton.icon(
                   onPressed: _guardando
                       ? null
-                      : () => _anular(context, ref, usuarioId),
+                      : () => _anular(
+                          context,
+                          ref,
+                          usuarioId,
+                          venta.metodoPago ?? MetodoPago.efectivo,
+                        ),
                   icon: _guardando
                       ? SizedBox(
                           width: 18,
