@@ -53,6 +53,15 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# TEMPORAL: flutter_local_notifications_windows 1.0.3 (con
+# flutter_local_notifications 19.x) incluye <experimental/coroutine> vía
+# C++/WinRT, y MSVC 14.51+ (Visual Studio 18) lo convierte en error
+# (STL1011) en vez de advertencia. Esta definición lo silencia. Debe ir ANTES
+# del include de generated_plugins.cmake para que se propague a los
+# subdirectorios de los plugins. Se puede eliminar al actualizar el plugin a
+# flutter_local_notifications >= 22.0.1 (windows >= 3.1.1, que ya lo suprime).
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
