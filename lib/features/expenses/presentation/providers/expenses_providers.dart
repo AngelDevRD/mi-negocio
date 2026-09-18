@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/app_database.dart' hide Gasto;
+import '../../../../core/utils/fechas.dart';
 import '../../data/datasources/expenses_local_datasource.dart';
 import '../../data/repositories/expenses_repository_impl.dart';
 import '../../domain/entities/gasto.dart';
@@ -13,18 +14,22 @@ final expensesRepositoryProvider = Provider<ExpensesRepository>((ref) {
 });
 
 /// Filtros activos de la lista de gastos: mes (RF-GAS-03) y categoría.
+///
+/// [mes] es el mes calendario LOCAL seleccionado (solo importan año/mes; se
+/// guarda como DateTime local, no UTC). [inicioMes]/[finMes] son los
+/// instantes UTC correspondientes, listos para comparar contra `fecha`.
 class GastosFiltro {
-  GastosFiltro({DateTime? mes, this.categoria})
-    : mes = mes ?? DateTime.now().toUtc();
+  GastosFiltro({DateTime? mes, this.categoria}) : mes = mes ?? DateTime.now();
 
   final DateTime mes;
   final String? categoria;
 
-  DateTime get inicioMes => DateTime.utc(mes.year, mes.month);
+  DateTime get inicioMes => inicioDelMesLocal(mes);
 
-  DateTime get finMes => DateTime.utc(
-    mes.year,
-    mes.month + 1,
+  /// El datasource compara con `<=` (no `<`), así que se sigue restando 1ms
+  /// al inicio del mes siguiente en vez de cambiar su contrato público.
+  DateTime get finMes => inicioDelMesSiguienteLocal(
+    mes,
   ).subtract(const Duration(milliseconds: 1));
 
   GastosFiltro copyWith({DateTime? mes, Object? categoria = _sinCambio}) {

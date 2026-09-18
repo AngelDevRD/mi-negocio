@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/utils/fechas.dart';
 import '../../../../core/utils/money.dart';
 import '../../domain/entities/analytics_data.dart';
 
@@ -8,6 +9,11 @@ import '../../domain/entities/analytics_data.dart';
 ///
 /// RNF-03: todas las cifras se calculan con consultas SQL agregadas, nunca
 /// iterando listas completas en Dart.
+///
+/// Los límites de mes se calculan en el calendario LOCAL del negocio (ver
+/// core/utils/fechas.dart), no en UTC. Cada método acepta un [ahora]
+/// opcional (por defecto `DateTime.now()`) para poder testear los límites
+/// de forma determinista, igual que en dashboard_dao.
 class AnalyticsDao {
   AnalyticsDao(this._db);
 
@@ -17,21 +23,15 @@ class AnalyticsDao {
   /// cualquier dato real, así el filtro `fecha >= ?` se cumple siempre.
   static final DateTime _desdeSiempre = DateTime.utc(1970);
 
-  static DateTime _inicioDeMes([DateTime? referencia]) {
-    final ahora = (referencia ?? DateTime.now()).toUtc();
-    return DateTime.utc(ahora.year, ahora.month);
-  }
-
   /// Límite inferior del rango seleccionado (RF-ANL-01).
-  static DateTime _desdePara(RangoAnalisis rango) {
-    final inicioMes = _inicioDeMes();
+  static DateTime _desdePara(RangoAnalisis rango, DateTime ahora) {
     switch (rango) {
       case RangoAnalisis.mes:
-        return inicioMes;
+        return inicioDelMesLocal(ahora);
       case RangoAnalisis.trimestre:
-        return DateTime.utc(inicioMes.year, inicioMes.month - 2);
+        return inicioDeMesDesplazadoLocal(ahora, -2);
       case RangoAnalisis.anio:
-        return DateTime.utc(inicioMes.year, inicioMes.month - 11);
+        return inicioDeMesDesplazadoLocal(ahora, -11);
       case RangoAnalisis.todo:
         return _desdeSiempre;
     }
@@ -39,7 +39,7 @@ class AnalyticsDao {
 
   /// Resumen del rango: ventas, compras, gastos, sueldos, ganancia neta,
   /// dinero total movido y valor actual del inventario (RF-ANL-01/02).
-  Stream<ResumenFinanciero> watchResumen(RangoAnalisis rango) {
+  Stream<ResumenFinanciero> watchResumen(RangoAnalisis rango, {DateTime? ahora}) {
     const sql = '''
       SELECT
         (SELECT COALESCE(SUM(total), 0) FROM ventas
@@ -58,7 +58,9 @@ class AnalyticsDao {
     return _db
         .customSelect(
           sql,
-          variables: [Variable.withDateTime(_desdePara(rango))],
+          variables: [
+            Variable.withDateTime(_desdePara(rango, ahora ?? DateTime.now())),
+          ],
           readsFrom: {
             _db.ventas,
             _db.compras,
@@ -91,21 +93,35 @@ class AnalyticsDao {
 
   /// Totales por mes dentro del rango, para las gráficas de línea y barras
   /// (RF-ANL-04): ventas vs gastos, y ganancia mensual.
-  Stream<List<PuntoMensual>> watchSerieMensual(RangoAnalisis rango) {
+  ///
+  /// Agrupa con un modificador de offset explícito (`'±NNN minutes'`) en vez
+  /// de `strftime(..., 'localtime')`: el modificador `'localtime'` de SQLite
+  /// depende de que el binario tenga soporte de huso horario del SO, que el
+  /// build de `sqlite3` usado en desarrollo/tests NO tiene (devuelve NULL en
+  /// vez de convertir) -- se comprobó ejecutando la consulta directamente.
+  /// `fecha` se guarda en UTC; sin desplazar por el offset local, una venta
+  /// de última hora del mes (hora local) se agruparía en el mes UTC
+  /// siguiente.
+  Stream<List<PuntoMensual>> watchSerieMensual(
+    RangoAnalisis rango, {
+    DateTime? ahora,
+  }) {
+    final ahoraReal = ahora ?? DateTime.now();
+    final offsetModifier = '${ahoraReal.timeZoneOffset.inMinutes} minutes';
     const sql = '''
-      SELECT strftime('%Y-%m', fecha) AS mes, 'ventas' AS tipo,
+      SELECT strftime('%Y-%m', fecha, ?2) AS mes, 'ventas' AS tipo,
         total AS monto, ganancia AS extra
         FROM ventas WHERE estado = 'completada' AND fecha >= ?1
       UNION ALL
-      SELECT strftime('%Y-%m', fecha) AS mes, 'compras' AS tipo,
+      SELECT strftime('%Y-%m', fecha, ?2) AS mes, 'compras' AS tipo,
         total AS monto, 0 AS extra
         FROM compras WHERE estado = 'completada' AND fecha >= ?1
       UNION ALL
-      SELECT strftime('%Y-%m', fecha) AS mes, 'gastos' AS tipo,
+      SELECT strftime('%Y-%m', fecha, ?2) AS mes, 'gastos' AS tipo,
         monto AS monto, 0 AS extra
         FROM gastos WHERE deleted_at IS NULL AND fecha >= ?1
       UNION ALL
-      SELECT strftime('%Y-%m', fecha) AS mes, 'sueldos' AS tipo,
+      SELECT strftime('%Y-%m', fecha, ?2) AS mes, 'sueldos' AS tipo,
         monto AS monto, 0 AS extra
         FROM pagos_empleados WHERE fecha >= ?1
       ORDER BY mes ASC
@@ -113,7 +129,10 @@ class AnalyticsDao {
     return _db
         .customSelect(
           sql,
-          variables: [Variable.withDateTime(_desdePara(rango))],
+          variables: [
+            Variable.withDateTime(_desdePara(rango, ahoraReal)),
+            Variable.withString(offsetModifier),
+          ],
           readsFrom: {_db.ventas, _db.compras, _db.gastos, _db.pagosEmpleados},
         )
         .watch()
@@ -158,13 +177,18 @@ class AnalyticsDao {
 
   /// Total de gastos por categoría dentro del rango, de mayor a menor
   /// (RF-ANL-04: pastel de gastos por categoría).
-  Stream<List<GastoPorCategoria>> watchGastosPorCategoria(RangoAnalisis rango) {
+  Stream<List<GastoPorCategoria>> watchGastosPorCategoria(
+    RangoAnalisis rango, {
+    DateTime? ahora,
+  }) {
     final total = _db.gastos.monto.sum();
     final query = _db.selectOnly(_db.gastos)
       ..addColumns([_db.gastos.categoria, total])
       ..where(
         _db.gastos.deletedAt.isNull() &
-            _db.gastos.fecha.isBiggerOrEqualValue(_desdePara(rango)),
+            _db.gastos.fecha.isBiggerOrEqualValue(
+              _desdePara(rango, ahora ?? DateTime.now()),
+            ),
       )
       ..groupBy([_db.gastos.categoria])
       ..orderBy([OrderingTerm.desc(total)]);
@@ -181,16 +205,11 @@ class AnalyticsDao {
   }
 
   /// Comparativa del mes actual vs el mes anterior (RF-ANL-05).
-  Stream<ComparativaMensual> watchComparativaMensual() {
-    final inicioActual = _inicioDeMes();
-    final inicioSiguiente = DateTime.utc(
-      inicioActual.year,
-      inicioActual.month + 1,
-    );
-    final inicioAnterior = DateTime.utc(
-      inicioActual.year,
-      inicioActual.month - 1,
-    );
+  Stream<ComparativaMensual> watchComparativaMensual({DateTime? ahora}) {
+    final ahoraReal = ahora ?? DateTime.now();
+    final inicioActual = inicioDelMesLocal(ahoraReal);
+    final inicioSiguiente = inicioDelMesSiguienteLocal(ahoraReal);
+    final inicioAnterior = inicioDeMesDesplazadoLocal(ahoraReal, -1);
     const sql = '''
       SELECT
         (SELECT COALESCE(SUM(total), 0) FROM ventas
@@ -238,8 +257,9 @@ class AnalyticsDao {
   /// Ranking de productos por unidades vendidas y ganancia acumulada en el
   /// rango (RF-ANL-03: más vendido, menos vendido, más rentable).
   Stream<List<ProductoVentasRanking>> watchRankingProductos(
-    RangoAnalisis rango,
-  ) {
+    RangoAnalisis rango, {
+    DateTime? ahora,
+  }) {
     const sql = '''
       SELECT p.id AS id, p.nombre AS nombre,
         COALESCE(SUM(vi.cantidad), 0) AS unidades,
@@ -258,7 +278,9 @@ class AnalyticsDao {
     return _db
         .customSelect(
           sql,
-          variables: [Variable.withDateTime(_desdePara(rango))],
+          variables: [
+            Variable.withDateTime(_desdePara(rango, ahora ?? DateTime.now())),
+          ],
           readsFrom: {_db.productos, _db.ventaItems, _db.ventas},
         )
         .watch()

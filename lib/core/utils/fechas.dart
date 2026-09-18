@@ -23,9 +23,16 @@ DateTime inicioDelMesLocal(DateTime ahora) {
 /// Instante en que empieza el mes calendario local siguiente al de [ahora]
 /// (diciembre -> enero del año siguiente incluido).
 DateTime inicioDelMesSiguienteLocal(DateTime ahora) {
+  return inicioDeMesDesplazadoLocal(ahora, 1);
+}
+
+/// Instante en que empieza el mes calendario local que resulta de sumarle
+/// [meses] (puede ser negativo, p.ej. -1 para "el mes anterior") al mes de
+/// [ahora]. Siempre se construye desde componentes LOCALES antes de
+/// convertir a UTC, para no perder el offset del huso horario al cruzar
+/// años (a diferencia de desplazar el campo `month` sobre un instante UTC
+/// ya truncado).
+DateTime inicioDeMesDesplazadoLocal(DateTime ahora, int meses) {
   final local = ahora.toLocal();
-  final siguiente = local.month == 12
-      ? DateTime(local.year + 1)
-      : DateTime(local.year, local.month + 1);
-  return siguiente.toUtc();
+  return DateTime(local.year, local.month + meses).toUtc();
 }

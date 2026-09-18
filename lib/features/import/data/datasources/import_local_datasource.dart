@@ -87,6 +87,11 @@ class ImportLocalDatasource {
     }
   }
 
+  // Una fecha de Excel sin hora ("05/03/2026" o su número de serie) no trae
+  // información de huso: se interpreta como medianoche LOCAL del negocio y
+  // se guarda en UTC, igual que el resto de las fechas de la app. Antes se
+  // creaba directamente como medianoche UTC, lo que en RD (UTC-4) se veía
+  // como el día anterior a partir de las 8 PM.
   DateTime? _parseFecha(String texto) {
     final iso = DateTime.tryParse(texto);
     if (iso != null) return iso.toUtc();
@@ -99,16 +104,24 @@ class ImportLocalDatasource {
       var anio = int.parse(match.group(3)!);
       if (anio < 100) anio += 2000;
       try {
-        return DateTime.utc(anio, mes, dia);
+        return DateTime(anio, mes, dia).toUtc();
       } catch (_) {
         return null;
       }
     }
 
-    // Número de serie de fecha de Excel (días desde 1899-12-30).
+    // Número de serie de fecha de Excel (días desde 1899-12-30). La suma de
+    // días es aritmética de calendario pura (ambos extremos a medianoche),
+    // así que year/month/day resultantes son el día correcto; recién ahí se
+    // reinterpreta como medianoche LOCAL.
     final serie = double.tryParse(texto);
     if (serie != null) {
-      return DateTime.utc(1899, 12, 30).add(Duration(days: serie.round()));
+      final fecha = DateTime.utc(
+        1899,
+        12,
+        30,
+      ).add(Duration(days: serie.round()));
+      return DateTime(fecha.year, fecha.month, fecha.day).toUtc();
     }
 
     return null;

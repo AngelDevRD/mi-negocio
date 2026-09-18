@@ -83,9 +83,33 @@ void main() {
       });
 
       expect(resultado['iso'], DateTime.utc(2026, 1, 15));
-      expect(resultado['corta'], DateTime.utc(2026, 2, 5));
-      expect(resultado['serie'], DateTime.utc(2023, 1, 1));
+      // 'corta' y 'serie' no traen hora: se interpretan como medianoche
+      // LOCAL (no UTC), por eso se comparan contra un instante construido
+      // con DateTime local, no contra una hora UTC fija.
+      expect(resultado['corta'], DateTime(2026, 2, 5).toUtc());
+      expect(resultado['serie'], DateTime(2023, 1, 1).toUtc());
     });
+
+    test(
+      'RN: "05/03/2026" y su número de serie de Excel equivalente dan el '
+      '5 de marzo en hora LOCAL (no el 4 a las 8pm en UTC-4)',
+      () {
+        final encabezados = ['corta', 'serie'];
+        // 46086 = días entre 1899-12-30 y 2026-03-05 (serie de Excel).
+        final fila = ['05/03/2026', '46086'];
+        final resultado = datasource.transformarFila(fila, encabezados, {
+          'corta': mapeo('corta', transform: ColumnTransform.fecha),
+          'serie': mapeo('serie', transform: ColumnTransform.fecha),
+        });
+
+        final esperado = DateTime(2026, 3, 5).toUtc();
+        expect(resultado['corta'], esperado);
+        expect(resultado['serie'], esperado);
+        // Vista en hora local, sigue siendo el 5 de marzo (no el 4).
+        expect((resultado['corta'] as DateTime).toLocal().day, 5);
+        expect((resultado['corta'] as DateTime).toLocal().month, 3);
+      },
+    );
 
     test('transforma valores enumerados y sí/no', () {
       final encabezados = ['tipo', 'activo'];

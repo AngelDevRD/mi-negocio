@@ -1,5 +1,6 @@
 import 'package:app_gestion/core/database/app_database.dart';
 import 'package:app_gestion/core/database/tables/base.dart';
+import 'package:app_gestion/core/utils/fechas.dart';
 import 'package:app_gestion/features/analytics/data/datasources/analytics_dao.dart';
 import 'package:app_gestion/features/analytics/domain/entities/analytics_data.dart';
 import 'package:drift/drift.dart' show Value;
@@ -17,9 +18,9 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     dao = AnalyticsDao(db);
 
-    final ahora = DateTime.now().toUtc();
-    inicioMesActual = DateTime.utc(ahora.year, ahora.month);
-    inicioMesAnterior = DateTime.utc(ahora.year, ahora.month - 1);
+    final ahora = DateTime.now();
+    inicioMesActual = inicioDelMesLocal(ahora);
+    inicioMesAnterior = inicioDeMesDesplazadoLocal(ahora, -1);
     final fechaMesActual = inicioMesActual.add(const Duration(days: 1));
     final fechaMesAnterior = inicioMesAnterior.add(const Duration(days: 1));
 
@@ -338,6 +339,57 @@ void main() {
       expect(mesActual.ganancia.cents, 3100 - 1500 - 3500);
     },
   );
+
+  group('límites de mes en hora local (RN)', () {
+    test(
+      'venta a las 21:00 local del último día del mes cuenta en ESE mes '
+      '(watchResumen y watchSerieMensual), no en el mes siguiente',
+      () async {
+        final usuarioId = (await db.select(db.usuarios).get()).first.id;
+        final sesionId = (await db.select(db.cajaSesiones).get()).first.id;
+
+        // Año lejano para no chocar con los datos "del mes actual real" que
+        // inserta el setUp: 31 de marzo de 2030, 21:00 hora local.
+        final ventaFechaUtc = DateTime(2030, 3, 31, 21).toUtc();
+        await db
+            .into(db.ventas)
+            .insert(
+              VentasCompanion.insert(
+                tipo: TipoVenta.rapida,
+                total: 5000,
+                ganancia: 2000,
+                cajaSesionId: sesionId,
+                usuarioId: usuarioId,
+                estado: EstadoVenta.completada,
+                fecha: ventaFechaUtc,
+              ),
+            );
+
+        // Consultada esa misma noche de marzo: cuenta como "de marzo".
+        final ahoraMismoMes = DateTime(2030, 3, 31, 22);
+        final resumenMarzo = await dao
+            .watchResumen(RangoAnalisis.mes, ahora: ahoraMismoMes)
+            .first;
+        expect(resumenMarzo.ventas.cents, 5000);
+
+        final serie = await dao
+            .watchSerieMensual(RangoAnalisis.todo, ahora: ahoraMismoMes)
+            .first;
+        final marzo2030 = serie.firstWhere(
+          (p) => p.mes.year == 2030 && p.mes.month == 3,
+        );
+        expect(marzo2030.ventas.cents, 5000);
+
+        // Consultada ya en abril: esa venta de marzo ya NO cuenta como "el
+        // mes" (RangoAnalisis.mes = abril).
+        final ahoraAbril = DateTime(2030, 4, 5, 8);
+        final resumenAbril = await dao
+            .watchResumen(RangoAnalisis.mes, ahora: ahoraAbril)
+            .first;
+        expect(resumenAbril.ventas.cents, 0);
+      },
+    );
+  });
 
   group('watchGastosPorCategoria', () {
     test('rango mes: Servicios y Transporte del mes actual', () async {

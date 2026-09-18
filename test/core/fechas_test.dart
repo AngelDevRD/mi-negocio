@@ -35,4 +35,34 @@ void main() {
       );
     });
   });
+
+  group('inicioDeMesDesplazadoLocal', () {
+    test('desplazamiento negativo: mes anterior', () {
+      final ahora = DateTime(2026, 3, 10);
+      expect(
+        inicioDeMesDesplazadoLocal(ahora, -1),
+        DateTime(2026, 2).toUtc(),
+      );
+    });
+
+    test('desplazamiento negativo cruzando el año (trimestre/año)', () {
+      final ahora = DateTime(2026, 1, 15);
+      expect(
+        inicioDeMesDesplazadoLocal(ahora, -2),
+        DateTime(2025, 11).toUtc(),
+      );
+      expect(
+        inicioDeMesDesplazadoLocal(ahora, -11),
+        DateTime(2025, 2).toUtc(),
+      );
+    });
+
+    test('desplazamiento cero equivale a inicioDelMesLocal', () {
+      final ahora = DateTime(2026, 7, 22, 13, 45);
+      expect(
+        inicioDeMesDesplazadoLocal(ahora, 0),
+        inicioDelMesLocal(ahora),
+      );
+    });
+  });
 }

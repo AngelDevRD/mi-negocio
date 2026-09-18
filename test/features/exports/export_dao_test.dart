@@ -1,5 +1,6 @@
 import 'package:app_gestion/core/database/app_database.dart';
 import 'package:app_gestion/core/database/tables/base.dart';
+import 'package:app_gestion/core/utils/fechas.dart';
 import 'package:app_gestion/features/exports/data/datasources/export_dao.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
@@ -24,11 +25,10 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     dao = ExportDao(db);
 
-    final ahora = DateTime.now().toUtc();
-    inicioMes = DateTime.utc(ahora.year, ahora.month);
-    finMes = DateTime.utc(
-      ahora.year,
-      ahora.month + 1,
+    final ahora = DateTime.now();
+    inicioMes = inicioDelMesLocal(ahora);
+    finMes = inicioDelMesSiguienteLocal(
+      ahora,
     ).subtract(const Duration(seconds: 1));
     fechaEnMes = inicioMes.add(const Duration(days: 1));
     fechaFueraDeMes = inicioMes.subtract(const Duration(days: 5));
@@ -464,6 +464,49 @@ void main() {
       expect(resumen.sueldos.cents, 2000);
       // ganancia neta = ganancia bruta (3100) - gastos (1000) - sueldos (2000)
       expect(resumen.ganancia.cents, 100);
+    },
+  );
+
+  test(
+    'obtenerResumenMensual: venta a las 21:00 local del último día del mes '
+    'cuenta en ESE mes',
+    () async {
+      final sesionId = generateUuidV4();
+      await db
+          .into(db.cajaSesiones)
+          .insert(
+            CajaSesionesCompanion.insert(
+              id: Value(sesionId),
+              fechaApertura: DateTime(2030, 3, 1).toUtc(),
+              montoApertura: 0,
+              usuarioApertura: usuarioId,
+              estado: EstadoCajaSesion.abierta,
+            ),
+          );
+      // 31 de marzo de 2030, 21:00 hora local: último día del mes.
+      await db
+          .into(db.ventas)
+          .insert(
+            VentasCompanion.insert(
+              tipo: TipoVenta.rapida,
+              total: 5000,
+              ganancia: 2000,
+              cajaSesionId: sesionId,
+              usuarioId: usuarioId,
+              estado: EstadoVenta.completada,
+              fecha: DateTime(2030, 3, 31, 21).toUtc(),
+            ),
+          );
+
+      final resumenMarzo = await dao.obtenerResumenMensual(
+        DateTime(2030, 3, 1),
+      );
+      expect(resumenMarzo.ventas.cents, 5000);
+
+      final resumenAbril = await dao.obtenerResumenMensual(
+        DateTime(2030, 4, 1),
+      );
+      expect(resumenAbril.ventas.cents, 0);
     },
   );
 }

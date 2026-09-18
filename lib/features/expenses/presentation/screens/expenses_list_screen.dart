@@ -97,7 +97,7 @@ class _GastosFiltroBar extends ConsumerWidget {
                 .read(gastosFiltroProvider.notifier)
                 .actualizar(
                   (f) => f.copyWith(
-                    mes: DateTime.utc(f.mes.year, f.mes.month - 1),
+                    mes: DateTime(f.mes.year, f.mes.month - 1),
                   ),
                 ),
           ),
@@ -115,7 +115,7 @@ class _GastosFiltroBar extends ConsumerWidget {
                 .read(gastosFiltroProvider.notifier)
                 .actualizar(
                   (f) => f.copyWith(
-                    mes: DateTime.utc(f.mes.year, f.mes.month + 1),
+                    mes: DateTime(f.mes.year, f.mes.month + 1),
                   ),
                 ),
           ),

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/utils/fechas.dart';
 import '../../../../core/utils/money.dart';
 import '../../domain/entities/export_models.dart';
 
@@ -297,8 +298,9 @@ class ExportDao {
   /// Mini estado de resultados del mes con los datos del negocio para el
   /// encabezado del PDF (RF-EXP-02).
   Future<ResumenMensualExportRow> obtenerResumenMensual(DateTime mes) async {
-    final inicio = DateTime.utc(mes.year, mes.month);
-    final fin = DateTime.utc(mes.year, mes.month + 1);
+    // [mes] es un mes calendario LOCAL (año/mes elegidos por el usuario).
+    final inicio = inicioDelMesLocal(mes);
+    final fin = inicioDelMesSiguienteLocal(mes);
 
     const sql = '''
       SELECT
