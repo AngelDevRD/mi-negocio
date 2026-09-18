@@ -103,6 +103,23 @@ void main() {
       expect(resultado['activo'], true);
     });
 
+    test(
+      '"NaN" e "Infinity" en columna numero se tratan como valor inválido',
+      () {
+        final encabezados = ['a', 'b', 'c'];
+        final fila = ['NaN', 'Infinity', '-Infinity'];
+        final resultado = datasource.transformarFila(fila, encabezados, {
+          'a': mapeo('a', transform: ColumnTransform.numero),
+          'b': mapeo('b', transform: ColumnTransform.numero),
+          'c': mapeo('c', transform: ColumnTransform.numero),
+        });
+
+        expect(resultado['a'], isNull);
+        expect(resultado['b'], isNull);
+        expect(resultado['c'], isNull);
+      },
+    );
+
     test('columnas sin valor o sin mapeo dan null', () {
       final encabezados = ['nombre', 'precio'];
       final fila = ['Pan', ''];

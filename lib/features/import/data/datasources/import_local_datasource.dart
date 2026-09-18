@@ -56,7 +56,11 @@ class ImportLocalDatasource {
       case ColumnTransform.texto:
         return texto;
       case ColumnTransform.numero:
-        return double.tryParse(texto.replaceAll(',', ''));
+        final valor = double.tryParse(texto.replaceAll(',', ''));
+        // "NaN"/"Infinity"/desbordamientos parsean pero no son un número
+        // válido para stock/cantidad: se tratan igual que un valor inválido.
+        if (valor == null || !valor.isFinite) return null;
+        return valor;
       case ColumnTransform.dinero:
         try {
           return Money.parse(texto).cents;

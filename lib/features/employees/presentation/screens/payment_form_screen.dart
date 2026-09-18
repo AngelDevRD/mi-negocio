@@ -138,7 +138,9 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
               ],
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                if (Money.parse(v).cents <= 0) {
+                final monto = Money.tryParse(v);
+                if (monto == null) return 'Monto inválido';
+                if (monto.cents <= 0) {
                   return 'El monto debe ser mayor que cero';
                 }
                 return null;

@@ -136,7 +136,9 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
 
     final repo = ref.read(employeesRepositoryProvider);
     final salarioTexto = _salarioController.text.trim();
-    final salario = salarioTexto.isEmpty ? null : Money.parse(salarioTexto);
+    final salario = salarioTexto.isEmpty
+        ? null
+        : Money.tryParse(salarioTexto);
     final cedula = _cedulaController.text.trim();
     final direccion = _direccionController.text.trim();
     final telefono = _telefonoController.text.trim();
@@ -305,6 +307,14 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
               ],
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+                final monto = Money.tryParse(v);
+                if (monto == null || monto.isNegative) {
+                  return 'Monto inválido';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: AppSpacing.sm),
             DropdownButtonFormField<String?>(
