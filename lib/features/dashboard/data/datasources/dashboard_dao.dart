@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/utils/fechas.dart';
 import '../../../../core/utils/money.dart';
 import '../../domain/entities/dashboard_data.dart';
 
@@ -9,20 +10,15 @@ import '../../domain/entities/dashboard_data.dart';
 /// Cada stream se reemite cuando cambian las tablas de las que depende
 /// (table-watching de Drift), por lo que el dashboard se actualiza solo
 /// cuando otra pantalla registra una venta, compra, gasto o movimiento.
+///
+/// Los límites de "hoy" y "del mes" se calculan en el calendario LOCAL del
+/// negocio (ver core/utils/fechas.dart), no en UTC: el `ahora` de referencia
+/// lo pasa quien llama (el provider), nunca `DateTime.now()` aquí, para que
+/// el resultado sea determinista y testeable.
 class DashboardDao {
   DashboardDao(this._db);
 
   final AppDatabase _db;
-
-  static DateTime _inicioDeHoy() {
-    final ahora = DateTime.now().toUtc();
-    return DateTime.utc(ahora.year, ahora.month, ahora.day);
-  }
-
-  static DateTime _inicioDeMes() {
-    final ahora = DateTime.now().toUtc();
-    return DateTime.utc(ahora.year, ahora.month);
-  }
 
   /// Sesión de caja abierta (si hay), con monto = apertura + movimientos.
   Stream<CajaActual?> watchCajaActual() {
@@ -51,10 +47,12 @@ class DashboardDao {
   }
 
   /// Total vendido hoy (ventas completadas).
-  Stream<Money> watchVentasDelDia() => _watchSumaVentas(desde: _inicioDeHoy());
+  Stream<Money> watchVentasDelDia({required DateTime ahora}) =>
+      _watchSumaVentas(desde: inicioDelDiaLocal(ahora));
 
   /// Total vendido en el mes (ventas completadas).
-  Stream<Money> watchVentasDelMes() => _watchSumaVentas(desde: _inicioDeMes());
+  Stream<Money> watchVentasDelMes({required DateTime ahora}) =>
+      _watchSumaVentas(desde: inicioDelMesLocal(ahora));
 
   Stream<Money> _watchSumaVentas({required DateTime desde}) {
     final query = _db.selectOnly(_db.ventas)
@@ -69,12 +67,12 @@ class DashboardDao {
   }
 
   /// Total comprado en el mes (compras completadas).
-  Stream<Money> watchComprasDelMes() {
+  Stream<Money> watchComprasDelMes({required DateTime ahora}) {
     final query = _db.selectOnly(_db.compras)
       ..addColumns([_db.compras.total.sum()])
       ..where(
         _db.compras.estado.equalsValue(EstadoCompra.completada) &
-            _db.compras.fecha.isBiggerOrEqualValue(_inicioDeMes()),
+            _db.compras.fecha.isBiggerOrEqualValue(inicioDelMesLocal(ahora)),
       );
     return query.watchSingle().map(
       (row) => Money(row.read(_db.compras.total.sum()) ?? 0),
@@ -82,12 +80,12 @@ class DashboardDao {
   }
 
   /// Total de gastos del mes.
-  Stream<Money> watchGastosDelMes() {
+  Stream<Money> watchGastosDelMes({required DateTime ahora}) {
     final query = _db.selectOnly(_db.gastos)
       ..addColumns([_db.gastos.monto.sum()])
       ..where(
         _db.gastos.deletedAt.isNull() &
-            _db.gastos.fecha.isBiggerOrEqualValue(_inicioDeMes()),
+            _db.gastos.fecha.isBiggerOrEqualValue(inicioDelMesLocal(ahora)),
       );
     return query.watchSingle().map(
       (row) => Money(row.read(_db.gastos.monto.sum()) ?? 0),
@@ -95,12 +93,12 @@ class DashboardDao {
   }
 
   /// Ganancia del mes (RN-05). Solo se muestra al Administrador (RN-15).
-  Stream<Money> watchGananciaDelMes() {
+  Stream<Money> watchGananciaDelMes({required DateTime ahora}) {
     final query = _db.selectOnly(_db.ventas)
       ..addColumns([_db.ventas.ganancia.sum()])
       ..where(
         _db.ventas.estado.equalsValue(EstadoVenta.completada) &
-            _db.ventas.fecha.isBiggerOrEqualValue(_inicioDeMes()),
+            _db.ventas.fecha.isBiggerOrEqualValue(inicioDelMesLocal(ahora)),
       );
     return query.watchSingle().map(
       (row) => Money(row.read(_db.ventas.ganancia.sum()) ?? 0),

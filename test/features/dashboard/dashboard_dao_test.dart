@@ -127,7 +127,7 @@ void main() {
         estado: EstadoVenta.anulada,
       );
 
-      final resultado = await dao.watchVentasDelDia().first;
+      final resultado = await dao.watchVentasDelDia(ahora: ahora).first;
 
       expect(resultado, Money(1000));
     });
@@ -135,7 +135,7 @@ void main() {
     test('se reemite al insertar una nueva venta', () async {
       await insertarVenta(total: 1000, ganancia: 400, fecha: ahora);
 
-      final stream = dao.watchVentasDelDia();
+      final stream = dao.watchVentasDelDia(ahora: ahora);
       final primero = await stream.first;
       expect(primero, Money(1000));
 
@@ -144,6 +144,35 @@ void main() {
       final segundo = await stream.first;
       expect(segundo, Money(1250));
     });
+
+    test(
+      'RN: usa el día calendario LOCAL, no UTC (venta a las 21:00 local '
+      'cuenta como de hoy hasta la medianoche local, no la de UTC)',
+      () async {
+        // Un día D a las 21:00 hora local: en cualquier huso con offset
+        // negativo (como RD, UTC-4) esto ya cayó "al día siguiente" en UTC.
+        final diaD210pmLocal = DateTime(2026, 3, 15, 21);
+        await insertarVenta(
+          total: 1000,
+          ganancia: 400,
+          fecha: diaD210pmLocal.toUtc(),
+        );
+
+        // Consultando desde el mismo día D a las 22:00 local: debe contar.
+        final mismDiaMasTarde = DateTime(2026, 3, 15, 22);
+        final resultadoMismoDia = await dao
+            .watchVentasDelDia(ahora: mismDiaMasTarde)
+            .first;
+        expect(resultadoMismoDia, Money(1000));
+
+        // Consultando desde D+1 a las 08:00 local: ya no debe contar.
+        final diaSiguiente = DateTime(2026, 3, 16, 8);
+        final resultadoDiaSiguiente = await dao
+            .watchVentasDelDia(ahora: diaSiguiente)
+            .first;
+        expect(resultadoDiaSiguiente, Money.zero);
+      },
+    );
   });
 
   group('watchVentasDelMes', () {
@@ -151,7 +180,7 @@ void main() {
       await insertarVenta(total: 1000, ganancia: 400, fecha: ahora);
       await insertarVenta(total: 700, ganancia: 300, fecha: mesPasado);
 
-      final resultado = await dao.watchVentasDelMes().first;
+      final resultado = await dao.watchVentasDelMes(ahora: ahora).first;
 
       expect(resultado, Money(1000));
     });
@@ -167,7 +196,7 @@ void main() {
         estado: EstadoCompra.anulada,
       );
 
-      final resultado = await dao.watchComprasDelMes().first;
+      final resultado = await dao.watchComprasDelMes(ahora: ahora).first;
 
       expect(resultado, Money(2000));
     });
@@ -178,7 +207,7 @@ void main() {
       await insertarGasto(monto: 300, fecha: ahora);
       await insertarGasto(monto: 150, fecha: mesPasado);
 
-      final resultado = await dao.watchGastosDelMes().first;
+      final resultado = await dao.watchGastosDelMes(ahora: ahora).first;
 
       expect(resultado, Money(300));
     });
@@ -190,7 +219,7 @@ void main() {
       await insertarVenta(total: 2000, ganancia: 800, fecha: ahora);
       await insertarVenta(total: 700, ganancia: 300, fecha: mesPasado);
 
-      final resultado = await dao.watchGananciaDelMes().first;
+      final resultado = await dao.watchGananciaDelMes(ahora: ahora).first;
 
       expect(resultado, Money(1200));
     });
