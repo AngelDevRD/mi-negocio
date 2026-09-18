@@ -7,6 +7,8 @@ import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
 import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
+import 'package:app_gestion/features/customers/domain/entities/cliente.dart';
+import 'package:app_gestion/features/customers/presentation/providers/customers_providers.dart';
 import 'package:app_gestion/features/dashboard/domain/entities/dashboard_data.dart';
 import 'package:app_gestion/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:app_gestion/features/products/domain/entities/producto.dart';
@@ -25,6 +27,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+
+import '../customers/repo_clientes_falso.dart';
 
 /// Repositorio de productos en memoria (sin drift: sus streams dejan timers
 /// pendientes en los widget tests).
@@ -66,6 +70,7 @@ class _VentasFalsas implements SalesRepository {
           String? nota,
           String usuarioId,
           MetodoPago metodoPago,
+          String? clienteId,
         })
       >[];
 
@@ -108,6 +113,7 @@ class _VentasFalsas implements SalesRepository {
       nota: nota,
       usuarioId: usuarioId,
       metodoPago: metodoPago,
+      clienteId: clienteId,
     ));
     return const Result.ok('venta-1');
   }
@@ -169,8 +175,9 @@ void _fijarTamano(WidgetTester tester, Size tamano) {
 }
 
 class _Escenario {
-  _Escenario(this.ventas);
+  _Escenario(this.ventas, this.clientes);
   final _VentasFalsas ventas;
+  final RepoClientesFalso clientes;
 }
 
 Future<_Escenario> _montar(
@@ -180,16 +187,20 @@ Future<_Escenario> _montar(
   List<Producto>? productos,
   bool cajaAbierta = true,
   bool permitirStock = true,
+  List<Cliente> clientesIniciales = const [],
   Widget home = const PosScreen(),
 }) async {
   _fijarTamano(tester, tamano);
 
   final ventas = _VentasFalsas();
+  final clientes = RepoClientesFalso(clientesIniciales);
+  addTearDown(clientes.cerrar);
   final List<Override> overrides = [
     productsRepositoryProvider.overrideWithValue(
       _ProductosFalsos(productos ?? [_producto('Arroz'), _producto('Salami')]),
     ),
     salesRepositoryProvider.overrideWithValue(ventas),
+    customersRepositoryProvider.overrideWithValue(clientes),
     cajaActualProvider.overrideWith(
       (ref) => Stream.value(cajaAbierta ? _caja : null),
     ),
@@ -211,7 +222,7 @@ Future<_Escenario> _montar(
   await ProviderScope.containerOf(
     tester.element(find.byType(MaterialApp)),
   ).read(authControllerProvider.future);
-  return _Escenario(ventas);
+  return _Escenario(ventas, clientes);
 }
 
 /// Toca un producto y confirma el diálogo de cantidad/monto con [cantidad].
@@ -767,6 +778,224 @@ void main() {
         MetodoPago.efectivo,
       );
       expect(find.text('Venta registrada · Cambio RD\$ 0.00'), findsOneWidget);
+    });
+  });
+
+  group('fiar desde el cobro', () {
+    Cliente rosa({Money? limite, int saldo = 15000, bool activo = true}) =>
+        Cliente(
+          id: 'c1',
+          nombre: 'Doña Rosa',
+          telefono: '809-111-2222',
+          limiteCredito: limite,
+          activo: activo,
+          saldo: Money(saldo),
+        );
+
+    Future<void> abrirFiado(WidgetTester tester) async {
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SegmentedButton<MetodoPago>),
+          matching: find.text('Fiado'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> elegirCliente(WidgetTester tester, String nombre) async {
+      await tester.tap(find.text('Elegir cliente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, nombre));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('exige cliente: "Fiar" está deshabilitado hasta elegirlo y '
+        'se ocultan monto, chips y cambio', (tester) async {
+      await _montar(tester, clientesIniciales: [rosa()]);
+      await _agregar(tester, 'Arroz');
+
+      await abrirFiado(tester);
+
+      expect(
+        find.descendant(
+          of: find.byType(CobroDialog),
+          matching: find.byType(TextField),
+        ),
+        findsNothing,
+      );
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Cambio'), findsNothing);
+      final fiar = find.widgetWithText(FilledButton, 'Fiar RD\$ 150.00');
+      expect(tester.widget<FilledButton>(fiar).onPressed, isNull);
+
+      await elegirCliente(tester, 'Doña Rosa');
+
+      expect(find.text('Saldo actual'), findsOneWidget);
+      expect(tester.widget<FilledButton>(fiar).onPressed, isNotNull);
+    });
+
+    testWidgets('registra la venta a crédito con ese cliente y muestra el '
+        'mensaje con el saldo resultante', (tester) async {
+      final escenario = await _montar(tester, clientesIniciales: [rosa()]);
+      await _agregar(tester, 'Arroz');
+
+      await abrirFiado(tester);
+      await elegirCliente(tester, 'Doña Rosa');
+      await tester.tap(find.widgetWithText(FilledButton, 'Fiar RD\$ 150.00'));
+      await tester.pumpAndSettle();
+
+      final venta = escenario.ventas.registradas.single;
+      expect(venta.metodoPago, MetodoPago.credito);
+      expect(venta.clienteId, 'c1');
+      expect(
+        find.text('Venta fiada a Doña Rosa · Saldo RD\$ 300.00'),
+        findsOneWidget,
+      );
+      expect(find.text('Toca un producto para agregarlo'), findsOneWidget);
+    });
+
+    testWidgets('con límite muestra "Disponible" y avisa si la venta lo '
+        'supera', (tester) async {
+      await _montar(
+        tester,
+        clientesIniciales: [rosa(limite: const Money(20000))],
+      );
+      await _agregar(tester, 'Arroz');
+
+      await abrirFiado(tester);
+      await elegirCliente(tester, 'Doña Rosa');
+
+      expect(find.text('Disponible'), findsOneWidget);
+      expect(find.text('RD\$ 50.00'), findsOneWidget); // 200 - 150 de saldo
+      expect(
+        find.text('Esta venta supera el límite de crédito.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('límite superado: error del repositorio y el carrito queda '
+        'INTACTO', (tester) async {
+      final escenario = await _montar(
+        tester,
+        clientesIniciales: [rosa(limite: const Money(20000))],
+      );
+      escenario.ventas.falla =
+          'El fiado supera el límite de crédito de Doña Rosa: saldo '
+          'RD\$ 150.00, límite RD\$ 200.00.';
+      await _agregar(tester, 'Arroz', cantidad: '2');
+
+      await abrirFiado(tester);
+      await elegirCliente(tester, 'Doña Rosa');
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) =>
+              w is FilledButton &&
+              (w.child as Text?)?.data?.startsWith('Fiar') == true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('El fiado supera el límite de crédito'),
+        findsOneWidget,
+      );
+      expect(escenario.ventas.registradas, isEmpty);
+      // Carrito intacto: sigue la línea (2 x RD$ 150.00 = RD$ 300.00).
+      expect(find.text('Toca un producto para agregarlo'), findsNothing);
+      expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    });
+
+    testWidgets('los clientes inactivos no se ofrecen', (tester) async {
+      await _montar(
+        tester,
+        clientesIniciales: [
+          rosa(),
+          const Cliente(
+            id: 'c2',
+            nombre: 'Juan Inactivo',
+            activo: false,
+            saldo: Money(0),
+          ),
+        ],
+      );
+      await _agregar(tester, 'Arroz');
+
+      await abrirFiado(tester);
+      await tester.tap(find.text('Elegir cliente'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(ListTile, 'Doña Rosa'), findsOneWidget);
+      expect(find.text('Juan Inactivo'), findsNothing);
+    });
+
+    testWidgets('busca clientes por nombre o teléfono', (tester) async {
+      await _montar(
+        tester,
+        clientesIniciales: [
+          rosa(),
+          const Cliente(
+            id: 'c2',
+            nombre: 'Pedro Díaz',
+            telefono: '829-333-4444',
+            activo: true,
+            saldo: Money(0),
+          ),
+        ],
+      );
+      await _agregar(tester, 'Arroz');
+      await abrirFiado(tester);
+      await tester.tap(find.text('Elegir cliente'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Buscar por nombre o teléfono'),
+        '829',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(ListTile, 'Pedro Díaz'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'Doña Rosa'), findsNothing);
+    });
+
+    testWidgets('crear un cliente rápido desde el cobro lo crea (sin límite) '
+        'y lo selecciona', (tester) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      await abrirFiado(tester);
+      await tester.tap(find.text('Elegir cliente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nuevo cliente'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nombre'),
+        'Pedro Díaz',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Teléfono (opcional)'),
+        '829-333-4444',
+      );
+      await tester.tap(find.text('Crear y elegir'));
+      await tester.pumpAndSettle();
+
+      expect(escenario.clientes.creados.single.nombre, 'Pedro Díaz');
+      expect(escenario.clientes.creados.single.limite, isNull);
+      // Quedó seleccionado en el cobro.
+      expect(find.widgetWithText(OutlinedButton, 'Pedro Díaz'), findsOneWidget);
+      expect(find.text('Saldo actual'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Fiar RD\$ 150.00'));
+      await tester.pumpAndSettle();
+      expect(
+        escenario.ventas.registradas.single.clienteId,
+        escenario.clientes.clientes.single.id,
+      );
+      expect(
+        find.text('Venta fiada a Pedro Díaz · Saldo RD\$ 150.00'),
+        findsOneWidget,
+      );
     });
   });
 

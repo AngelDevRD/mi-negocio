@@ -4,9 +4,11 @@ import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
 import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
+import 'package:app_gestion/features/customers/presentation/providers/customers_providers.dart';
 import 'package:app_gestion/features/dashboard/domain/entities/dashboard_data.dart';
 import 'package:app_gestion/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:app_gestion/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:app_gestion/features/dashboard/presentation/widgets/dashboard_widgets.dart';
 import 'package:app_gestion/features/license/domain/entities/licencia.dart';
 import 'package:app_gestion/features/license/presentation/providers/license_providers.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +52,7 @@ List<Override> _overrides({
   bool cajaAbierta = true,
   bool hayProductos = true,
   List<ProductoBajoStock> bajoStock = const [],
+  Money porCobrar = const Money(0),
 }) => [
   authControllerProvider.overrideWith(
     () => _AuthFalso(SesionActiva(_usuario(rol))),
@@ -71,6 +74,7 @@ List<Override> _overrides({
     (ref) => Stream.value(const Money(300000)),
   ),
   productosBajoStockProvider.overrideWith((ref) => Stream.value(bajoStock)),
+  totalPorCobrarProvider.overrideWith((ref) => Stream.value(porCobrar)),
   movimientosRecientesProvider.overrideWith((ref) => Stream.value(const [])),
 ];
 
@@ -91,6 +95,7 @@ Future<void> _montar(
         AppRoutes.comprasNueva,
         AppRoutes.productosNuevo,
         AppRoutes.importar,
+        AppRoutes.clientes,
       ])
         GoRoute(path: ruta, builder: (_, _) => destino('destino:$ruta')),
     ],
@@ -239,6 +244,42 @@ void main() {
         tester.getTopLeft(find.text('Últimos movimientos')).dx,
         greaterThan(tester.getTopLeft(find.text('Inventario bajo')).dx),
       );
+    });
+  });
+
+  group('por cobrar (fiado)', () {
+    testWidgets('con deudas muestra el indicador con el total y abre '
+        '/clientes (ambos roles)', (tester) async {
+      for (final rol in RolUsuario.values) {
+        await _montar(
+          tester,
+          _overrides(rol: rol, porCobrar: const Money(45000)),
+        );
+
+        expect(find.text('Por cobrar (fiado)'), findsOneWidget, reason: '$rol');
+        expect(find.text('RD\$ 450.00'), findsOneWidget, reason: '$rol');
+
+        await tester.tap(find.text('Por cobrar (fiado)'));
+        await tester.pumpAndSettle();
+        expect(find.text('destino:${AppRoutes.clientes}'), findsOneWidget);
+      }
+    });
+
+    testWidgets('sin deudas NO aparece ni ocupa espacio', (tester) async {
+      await _montar(tester, _overrides(rol: RolUsuario.administrador));
+
+      expect(find.text('Por cobrar (fiado)'), findsNothing);
+      expect(find.byType(PorCobrarCard), findsOneWidget);
+      expect(tester.getSize(find.byType(PorCobrarCard)).height, 0);
+    });
+
+    testWidgets('no añade un segundo botón primario', (tester) async {
+      await _montar(
+        tester,
+        _overrides(rol: RolUsuario.cajero, porCobrar: const Money(45000)),
+      );
+
+      expect(_botonesPrimarios(tester), ['Nueva venta']);
     });
   });
 

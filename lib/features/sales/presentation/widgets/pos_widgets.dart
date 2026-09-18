@@ -13,12 +13,15 @@ import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_states.dart';
 import '../../../../core/widgets/money_text.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../customers/domain/entities/cliente.dart';
+import '../../../customers/presentation/widgets/saldo_widgets.dart';
 import '../../../products/domain/entities/producto.dart';
 import '../../../products/presentation/providers/products_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/entities/venta.dart';
 import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
+import 'selector_cliente.dart';
 
 bool _esAdministrador(WidgetRef ref) =>
     switch (ref.watch(authControllerProvider).value) {
@@ -201,6 +204,7 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
         tipo: TipoVenta.rapida,
         usuarioId: usuarioId,
         metodoPago: cobro.metodo,
+        clienteId: cobro.clienteId,
       );
     } catch (error, stackTrace) {
       // Excepción inesperada (p.ej. base de datos): no se sabe si la venta se
@@ -227,10 +231,15 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
       ok: (_) {
         carrito.limpiar();
         if (context.mounted) {
-          final detalle = cobro.metodo == MetodoPago.efectivo
-              ? 'Cambio ${(cobro.recibido - total).format()}'
-              : cobro.metodo.etiqueta;
-          AppSnackbar.exito(context, 'Venta registrada · $detalle');
+          final mensaje = switch (cobro.metodo) {
+            MetodoPago.efectivo =>
+              'Venta registrada · Cambio ${(cobro.recibido - total).format()}',
+            MetodoPago.credito =>
+              'Venta fiada a ${cobro.clienteNombre} · Saldo '
+                  '${cobro.saldoResultante!.format()}',
+            _ => 'Venta registrada · ${cobro.metodo.etiqueta}',
+          };
+          AppSnackbar.exito(context, mensaje);
         }
         return true;
       },
@@ -893,12 +902,12 @@ class _EditarLineaDialogState extends State<EditarLineaDialog> {
   }
 }
 
-/// Métodos que ofrece el cobro. El fiado (`credito`) existe en los datos pero
-/// aún no tiene selección de cliente en la UI (siguiente tarea).
+/// Métodos que ofrece el cobro. El fiado (`credito`) pide elegir un cliente.
 const _metodosDeCobro = [
   MetodoPago.efectivo,
   MetodoPago.tarjeta,
   MetodoPago.transferencia,
+  MetodoPago.credito,
 ];
 
 /// Billetes dominicanos de referencia para los botones de monto rápido.
@@ -914,10 +923,21 @@ List<Money> montosRapidos(Money total) => [
 /// Resultado del diálogo de cobro: cómo se pagó y cuánto se recibió (en
 /// tarjeta/transferencia el cobro es exacto: recibido = total).
 class ResultadoCobro {
-  const ResultadoCobro({required this.metodo, required this.recibido});
+  const ResultadoCobro({
+    required this.metodo,
+    required this.recibido,
+    this.clienteId,
+    this.clienteNombre,
+    this.saldoResultante,
+  });
 
   final MetodoPago metodo;
   final Money recibido;
+
+  /// Solo en fiado: el cliente y su saldo tras esta venta.
+  final String? clienteId;
+  final String? clienteNombre;
+  final Money? saldoResultante;
 }
 
 /// Diálogo de cobro. Arriba el método de pago (Efectivo por defecto). En
@@ -925,21 +945,22 @@ class ResultadoCobro {
 /// (escribir el billete lo reemplaza), Enter confirma y los chips fijan el
 /// monto; el cambio es el dato principal. Con tarjeta o transferencia el cobro
 /// es exacto: no hay monto recibido, chips ni cambio.
-class CobroDialog extends StatefulWidget {
+class CobroDialog extends ConsumerStatefulWidget {
   const CobroDialog({super.key, required this.total});
 
   final Money total;
 
   @override
-  State<CobroDialog> createState() => _CobroDialogState();
+  ConsumerState<CobroDialog> createState() => _CobroDialogState();
 }
 
-class _CobroDialogState extends State<CobroDialog> {
+class _CobroDialogState extends ConsumerState<CobroDialog> {
   final _formKey = GlobalKey<FormState>();
   late final _montoController = TextEditingController(
     text: widget.total.format(symbol: false),
   );
   MetodoPago _metodo = MetodoPago.efectivo;
+  Cliente? _cliente;
 
   @override
   void initState() {
@@ -977,7 +998,29 @@ class _CobroDialogState extends State<CobroDialog> {
     });
   }
 
+  Future<void> _elegirCliente() async {
+    final elegido = await showDialog<Cliente>(
+      context: context,
+      builder: (_) => const SelectorClienteDialog(),
+    );
+    if (elegido != null && mounted) setState(() => _cliente = elegido);
+  }
+
   void _confirmar() {
+    if (_metodo == MetodoPago.credito) {
+      final cliente = _cliente;
+      if (cliente == null) return;
+      Navigator.of(context).pop(
+        ResultadoCobro(
+          metodo: _metodo,
+          recibido: widget.total,
+          clienteId: cliente.id,
+          clienteNombre: cliente.nombre,
+          saldoResultante: Money(cliente.saldo.cents + widget.total.cents),
+        ),
+      );
+      return;
+    }
     if (_metodo != MetodoPago.efectivo) {
       Navigator.of(
         context,
@@ -988,6 +1031,63 @@ class _CobroDialogState extends State<CobroDialog> {
     Navigator.of(
       context,
     ).pop(ResultadoCobro(metodo: _metodo, recibido: _recibidoActual()!));
+  }
+
+  /// Fiado: selector de cliente, su saldo actual y lo que le queda disponible.
+  List<Widget> _seccionFiado(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final cliente = _cliente;
+    final limite = cliente?.limiteCredito;
+    final disponible = limite == null
+        ? null
+        : Money(limite.cents - cliente!.saldo.cents);
+    final excede = disponible != null && disponible.cents < widget.total.cents;
+
+    return [
+      OutlinedButton.icon(
+        onPressed: _elegirCliente,
+        icon: const Icon(Icons.person_outline),
+        label: Text(cliente == null ? 'Elegir cliente' : cliente.nombre),
+      ),
+      if (cliente != null) ...[
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            Text('Saldo actual', style: textTheme.titleSmall),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: EtiquetaSaldo(saldo: cliente.saldo)),
+          ],
+        ),
+        if (disponible != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Text('Disponible', style: textTheme.titleSmall),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: MoneyText(
+                  Money(disponible.cents < 0 ? 0 : disponible.cents),
+                  textAlign: TextAlign.right,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: excede ? scheme.error : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (excede)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                'Esta venta supera el límite de crédito.',
+                style: textTheme.bodySmall?.copyWith(color: scheme.error),
+              ),
+            ),
+        ],
+      ],
+    ];
   }
 
   @override
@@ -1117,7 +1217,9 @@ class _CobroDialogState extends State<CobroDialog> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 cambio,
-              ] else
+              ] else if (_metodo == MetodoPago.credito)
+                ..._seccionFiado(context)
+              else
                 Text(
                   'Se cobra el total exacto.',
                   style: textTheme.bodyMedium?.copyWith(
@@ -1134,8 +1236,14 @@ class _CobroDialogState extends State<CobroDialog> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _confirmar,
-          child: Text(efectivo ? 'Confirmar' : 'Confirmar pago'),
+          onPressed: _metodo == MetodoPago.credito && _cliente == null
+              ? null
+              : _confirmar,
+          child: Text(switch (_metodo) {
+            MetodoPago.efectivo => 'Confirmar',
+            MetodoPago.credito => 'Fiar ${widget.total.format()}',
+            _ => 'Confirmar pago',
+          }),
         ),
       ],
     );

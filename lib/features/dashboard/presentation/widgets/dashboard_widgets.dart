@@ -10,6 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../customers/presentation/providers/customers_providers.dart';
 import '../../../license/domain/entities/licencia.dart';
 import '../../../license/presentation/providers/license_providers.dart';
 import '../../../sales/presentation/widgets/abrir_caja_dialog.dart';
@@ -426,6 +427,64 @@ class VentasHoyCard extends ConsumerWidget {
       valor: ref.watch(ventasDelDiaProvider),
       onReintentar: () => ref.invalidate(ventasDelDiaProvider),
       estiloMonto: Theme.of(context).textTheme.headlineMedium,
+    );
+  }
+}
+
+/// Total que los clientes deben (fiado). Solo aparece si hay deuda; al tocarlo
+/// abre la lista de clientes. No ocupa espacio si nadie debe.
+class PorCobrarCard extends ConsumerWidget {
+  const PorCobrarCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final total = ref.watch(totalPorCobrarProvider).value;
+    if (total == null || total.cents <= 0) return const SizedBox.shrink();
+
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: scheme.surfaceContainerLow,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(AppRoutes.clientes),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: context.appColors.advertencia,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Por cobrar (fiado)',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      MoneyText(
+                        total,
+                        style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/pos_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Resultado devuelto por el diálogo (null = cancelado / aún abierto).
@@ -11,18 +12,20 @@ ResultadoCobro? _resultado;
 Future<void> _abrir(WidgetTester tester, Money total) async {
   _resultado = null;
   await tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.light(),
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              onPressed: () async =>
-                  _resultado = await showDialog<ResultadoCobro>(
-                    context: context,
-                    builder: (_) => CobroDialog(total: total),
-                  ),
-              child: const Text('abrir'),
+    ProviderScope(
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () async =>
+                    _resultado = await showDialog<ResultadoCobro>(
+                      context: context,
+                      builder: (_) => CobroDialog(total: total),
+                    ),
+                child: const Text('abrir'),
+              ),
             ),
           ),
         ),
@@ -158,6 +161,26 @@ void main() {
   });
 
   group('método de pago', () {
+    testWidgets('Fiado oculta monto, chips y cambio, pide cliente y su botón '
+        'dice "Fiar" y está deshabilitado', (tester) async {
+      await _abrir(tester, total260);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SegmentedButton<MetodoPago>),
+          matching: find.text('Fiado'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Cambio'), findsNothing);
+      expect(find.text('Elegir cliente'), findsOneWidget);
+      final fiar = find.widgetWithText(FilledButton, 'Fiar RD\$ 260.00');
+      expect(tester.widget<FilledButton>(fiar).onPressed, isNull);
+    });
+
     Finder segmento(String texto) => find.descendant(
       of: find.byType(SegmentedButton<MetodoPago>),
       matching: find.text(texto),
@@ -171,9 +194,8 @@ void main() {
       for (final texto in ['Efectivo', 'Tarjeta', 'Transferencia']) {
         expect(segmento(texto), findsOneWidget, reason: texto);
       }
-      // El fiado aún no se ofrece en el cobro (selección de cliente: siguiente
-      // tarea).
-      expect(segmento('Fiado'), findsNothing);
+      // El fiado se ofrece como cuarto método.
+      expect(segmento('Fiado'), findsOneWidget);
       final selector = tester.widget<SegmentedButton<MetodoPago>>(
         find.byType(SegmentedButton<MetodoPago>),
       );

@@ -14,6 +14,9 @@ import '../../features/cash_register/presentation/screens/cash_register_close_sc
 import '../../features/cash_register/presentation/screens/cash_register_history_screen.dart';
 import '../../features/cash_register/presentation/screens/cash_register_screen.dart';
 import '../../features/cash_register/presentation/screens/cash_register_session_detail_screen.dart';
+import '../../features/customers/presentation/screens/cliente_detail_screen.dart';
+import '../../features/customers/presentation/screens/cliente_form_screen.dart';
+import '../../features/customers/presentation/screens/clientes_list_screen.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../../features/employees/presentation/screens/employee_detail_screen.dart';
 import '../../features/employees/presentation/screens/employee_form_screen.dart';
@@ -79,6 +82,8 @@ abstract final class AppRoutes {
   static const String perfil = '/perfil';
   static const String asistente = '/asistente';
   static const String ajustes = '/ajustes';
+  static const String clientes = '/clientes';
+  static const String clientesNuevo = '/clientes/nuevo';
 
   /// Hub "Más": accesible para ambos roles (los módulos que lista aplican
   /// sus propios permisos).
@@ -328,6 +333,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.gastosNuevo,
         builder: (context, state) => const ExpenseFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.clientes,
+        builder: (context, state) => const ClientesListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.clientesNuevo,
+        builder: (context, state) => const ClienteFormScreen(),
+      ),
+      GoRoute(
+        path: '/clientes/:id',
+        builder: (context, state) =>
+            ClienteDetailScreen(clienteId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/clientes/:id/editar',
+        builder: (context, state) =>
+            ClienteFormScreen(clienteId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: AppRoutes.empleados,

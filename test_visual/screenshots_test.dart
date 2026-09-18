@@ -141,6 +141,9 @@ void main() {
         await sesion.ir('/productos');
         await sesion.capturar('admin_productos');
 
+        await sesion.ir('/clientes');
+        await sesion.capturar('admin_clientes');
+
         await sesion.ir('/mas');
         await sesion.capturar('admin_mas');
       },
@@ -308,6 +311,43 @@ void main() {
         await sesion.ir('/ventas');
         await sesion.tocarTexto('RD\$ 37.00');
         await sesion.capturar('venta_detalle_tarjeta');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · clientes y fiado', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · clientes y fiado',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        // Inicio con el indicador "Por cobrar (fiado)".
+        await sesion.capturar('inicio_por_cobrar');
+
+        await sesion.ir('/clientes');
+        await sesion.capturar('clientes_lista');
+        await sesion.tocarTexto('Todos');
+        await sesion.capturar('clientes_lista_todos');
+
+        await sesion.tocarTexto('Rosa Martínez');
+        await sesion.capturar('cliente_detalle');
+        await sesion.tocarTexto('Registrar abono');
+        await sesion.capturar('cliente_abono');
+        await sesion.tocarTexto('Cancelar');
+
+        // Cobro fiado: selector de cliente y cliente con límite elegido.
+        await sesion.ir('/ventas/rapida', apilar: true);
+        await _agregarAlCarrito(sesion, ['Huevos', 'Pan de agua']);
+        await sesion.tocarTexto('Cobrar');
+        await sesion.tocarTexto('Fiado');
+        await sesion.tocarTexto('Elegir cliente');
+        await sesion.capturar('pos_cobro_fiado_selector');
+        await sesion.tocarTexto('Carmen Suárez');
+        await sesion.capturar('pos_cobro_fiado');
+        await sesion.tocarTexto('Cancelar');
       },
     );
   });

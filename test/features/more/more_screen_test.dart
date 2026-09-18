@@ -60,6 +60,7 @@ void main() {
       // Visibles para todos.
       for (final texto in [
         'Operación',
+        'Clientes y fiado',
         'Compras',
         'Gastos',
         'Inventario',
@@ -121,6 +122,20 @@ void main() {
       expect(find.text('Ana Admin'), findsOneWidget);
       expect(find.text('Administrador'), findsOneWidget);
     });
+  });
+
+  group('Clientes y fiado', () {
+    for (final rol in RolUsuario.values) {
+      testWidgets('$rol lo ve como PRIMER elemento de Operación', (
+        tester,
+      ) async {
+        await _montar(tester, rol);
+
+        final y = tester.getTopLeft(find.text('Clientes y fiado')).dy;
+        expect(tester.getTopLeft(find.text('Operación')).dy, lessThan(y));
+        expect(tester.getTopLeft(find.text('Compras')).dy, greaterThan(y));
+      });
+    }
   });
 
   group('cerrar sesión', () {

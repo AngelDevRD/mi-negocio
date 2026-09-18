@@ -10,6 +10,8 @@ import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
 import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
 import 'package:app_gestion/features/cash_register/data/datasources/cash_register_local_datasource.dart';
 import 'package:app_gestion/features/cash_register/data/repositories/cash_register_repository_impl.dart';
+import 'package:app_gestion/features/customers/data/datasources/customers_local_datasource.dart';
+import 'package:app_gestion/features/customers/data/repositories/customers_repository_impl.dart';
 import 'package:app_gestion/features/expenses/data/datasources/expenses_local_datasource.dart';
 import 'package:app_gestion/features/expenses/data/repositories/expenses_repository_impl.dart';
 import 'package:app_gestion/features/license/domain/entities/licencia.dart';
@@ -354,6 +356,52 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   await venderHaceDias(1, [item(aceite, 2), item(arroz, 10)]);
   await venderHaceDias(2, [item(agua, 12), item(refresco, 3)]);
   await venderHaceDias(4, [item(salami, 2), item(pan, 8)]);
+
+  // Fiado: tres clientes (deuda alta, al día y con límite de crédito).
+  final clientes = CustomersRepositoryImpl(CustomersLocalDatasource(db));
+  Future<String> cliente(
+    String nombre,
+    String telefono, {
+    Money? limite,
+  }) async => (await clientes.crearCliente(
+    nombre: nombre,
+    telefono: telefono,
+    limiteCredito: limite,
+    usuarioId: usuarioId,
+  )).valueOrNull!;
+  Future<void> fiar(String clienteId, List<ItemVentaInput> items) async {
+    await ventas.registrarVenta(
+      tipo: TipoVenta.rapida,
+      items: items,
+      usuarioId: usuarioId,
+      metodoPago: MetodoPago.credito,
+      clienteId: clienteId,
+    );
+  }
+
+  final rosa = await cliente('Rosa Martínez', '809-555-0123');
+  final juan = await cliente('Juan Pérez', '829-555-0177');
+  final carmenS = await cliente(
+    'Carmen Suárez',
+    '849-555-0166',
+    limite: Money.fromPesos(1000),
+  );
+  await fiar(rosa, [item(cerveza, 12)]);
+  await fiar(rosa, [item(aceite, 4), item(arroz, 6)]);
+  await clientes.registrarAbono(
+    clienteId: rosa,
+    monto: Money.fromPesos(500),
+    metodo: MetodoPago.efectivo,
+    usuarioId: usuarioId,
+  );
+  await fiar(carmenS, [item(salami, 2), item(pan, 5)]);
+  await fiar(juan, [item(huevos, 10)]);
+  await clientes.registrarAbono(
+    clienteId: juan,
+    monto: Money.fromPesos(90),
+    metodo: MetodoPago.transferencia,
+    usuarioId: usuarioId,
+  );
 
   // Compras de reposición.
   final proveedor = (await compras.crearProveedor(

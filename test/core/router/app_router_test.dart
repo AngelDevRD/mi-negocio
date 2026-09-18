@@ -88,6 +88,24 @@ Future<String> _resolver(
 }
 
 void main() {
+  group('clientes y fiado (ambos roles, no solo admin)', () {
+    for (final rol in RolUsuario.values) {
+      for (final ruta in [
+        AppRoutes.clientes,
+        AppRoutes.clientesNuevo,
+        '/clientes/abc',
+        '/clientes/abc/editar',
+      ]) {
+        testWidgets('$ruta es accesible para $rol', (tester) async {
+          expect(
+            await _resolver(tester, ruta, sesion: SesionActiva(_usuario(rol))),
+            ruta,
+          );
+        });
+      }
+    }
+  });
+
   group('venta detallada (alias del POS)', () {
     for (final rol in RolUsuario.values) {
       testWidgets('/ventas/detallada termina en /ventas/rapida ($rol)', (

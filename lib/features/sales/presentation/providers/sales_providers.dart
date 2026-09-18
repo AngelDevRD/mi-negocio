@@ -146,6 +146,7 @@ class CarritoVentaController extends Notifier<CarritoVentaState> {
     required TipoVenta tipo,
     required String usuarioId,
     MetodoPago metodoPago = MetodoPago.efectivo,
+    String? clienteId,
   }) {
     return ref
         .read(salesRepositoryProvider)
@@ -155,6 +156,7 @@ class CarritoVentaController extends Notifier<CarritoVentaState> {
           nota: state.nota,
           usuarioId: usuarioId,
           metodoPago: metodoPago,
+          clienteId: clienteId,
         );
   }
 }

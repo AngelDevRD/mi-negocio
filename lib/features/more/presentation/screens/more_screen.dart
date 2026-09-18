@@ -30,6 +30,12 @@ class _Seccion {
 const _secciones = [
   _Seccion('Operación', [
     _Modulo(
+      Icons.groups_outlined,
+      'Clientes y fiado',
+      'Lleva la cuenta de lo que te deben y registra abonos.',
+      AppRoutes.clientes,
+    ),
+    _Modulo(
       Icons.shopping_cart_outlined,
       'Compras',
       'Registra compras a proveedores y repón el inventario.',

@@ -56,6 +56,7 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.lg),
                 const VentasHoyCard(),
                 const SizedBox(height: AppSpacing.sm),
+                const PorCobrarCard(),
                 IndicadoresMes(esAdmin: esAdmin),
                 const SizedBox(height: AppSpacing.lg),
                 LayoutBuilder(
