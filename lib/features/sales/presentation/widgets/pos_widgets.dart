@@ -893,6 +893,14 @@ class _EditarLineaDialogState extends State<EditarLineaDialog> {
   }
 }
 
+/// Métodos que ofrece el cobro. El fiado (`credito`) existe en los datos pero
+/// aún no tiene selección de cliente en la UI (siguiente tarea).
+const _metodosDeCobro = [
+  MetodoPago.efectivo,
+  MetodoPago.tarjeta,
+  MetodoPago.transferencia,
+];
+
 /// Billetes dominicanos de referencia para los botones de monto rápido.
 const _billetes = [50, 100, 200, 500, 1000, 2000];
 
@@ -1037,7 +1045,7 @@ class _CobroDialogState extends State<CobroDialog> {
                 child: SegmentedButton<MetodoPago>(
                   showSelectedIcon: false,
                   segments: [
-                    for (final metodo in MetodoPago.values)
+                    for (final metodo in _metodosDeCobro)
                       ButtonSegment(
                         value: metodo,
                         label: Text(metodo.etiqueta),

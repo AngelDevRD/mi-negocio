@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'enums.dart';
 import 'tables/base.dart';
+import 'tables/cliente_tables.dart';
 import 'tables/negocio_tables.dart';
 import 'tables/operacion_tables.dart';
 import 'tables/producto_tables.dart';
@@ -39,6 +40,9 @@ part 'app_database.g.dart';
     Ventas,
     VentaItems,
     VentaPagos,
+    // Fiado
+    Clientes,
+    MovimientosCliente,
     Gastos,
     Empleados,
     PagosEmpleados,
@@ -55,7 +59,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -67,6 +71,14 @@ class AppDatabase extends _$AppDatabase {
         if (from < 2) {
           await m.createTable(ventaPagos);
           await m.createIndex(idxVentaPagosVenta);
+        }
+        // v2 -> v3: fiado (clientes y libro de cuenta). Solo tablas nuevas.
+        if (from < 3) {
+          await m.createTable(clientes);
+          await m.createIndex(idxClientesNombre);
+          await m.createTable(movimientosCliente);
+          await m.createIndex(idxMovimientosClienteCliente);
+          await m.createIndex(idxMovimientosClienteFecha);
         }
       },
       beforeOpen: (details) async {

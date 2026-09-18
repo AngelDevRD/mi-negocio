@@ -19,6 +19,11 @@ String mensajeAnulacion(MetodoPago metodo) {
     return 'Esta acción revertirá el stock de los productos y el movimiento '
         'de caja asociado. $cierre';
   }
+  if (metodo == MetodoPago.credito) {
+    return 'Esta acción revertirá el stock de los productos y la deuda del '
+        'cliente. Esta venta fue a crédito (fiado): no afecta el efectivo de '
+        'la caja. $cierre';
+  }
   return 'Esta acción revertirá el stock de los productos. Esta venta se '
       'cobró con ${metodo.etiqueta.toLowerCase()}: no afecta el efectivo de '
       'la caja. $cierre';
@@ -133,7 +138,10 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
               ),
               _DetalleFila(
                 etiqueta: 'Método de pago',
-                valor: (venta.metodoPago ?? MetodoPago.efectivo).etiqueta,
+                valor: [
+                  (venta.metodoPago ?? MetodoPago.efectivo).etiqueta,
+                  if (venta.clienteNombre != null) venta.clienteNombre!,
+                ].join(' · '),
               ),
               _DetalleFila(
                 etiqueta: 'Fecha',

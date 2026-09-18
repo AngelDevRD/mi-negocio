@@ -171,6 +171,9 @@ void main() {
       for (final texto in ['Efectivo', 'Tarjeta', 'Transferencia']) {
         expect(segmento(texto), findsOneWidget, reason: texto);
       }
+      // El fiado aún no se ofrece en el cobro (selección de cliente: siguiente
+      // tarea).
+      expect(segmento('Fiado'), findsNothing);
       final selector = tester.widget<SegmentedButton<MetodoPago>>(
         find.byType(SegmentedButton<MetodoPago>),
       );

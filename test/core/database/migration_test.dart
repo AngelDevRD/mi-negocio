@@ -1,5 +1,6 @@
 import 'package:app_gestion/core/database/app_database.dart';
 import 'package:app_gestion/features/sales/data/datasources/sales_local_datasource.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,10 @@ import '../../generated_migrations/schema.dart';
 
 /// Migraciones de esquema verificadas con los esquemas exportados en
 /// `drift_schemas/` (`dart run drift_dev schema dump ...`).
+///
+/// `AppDatabase.schemaVersion` es 3: `migrateAndValidate(db, 3)` ejecuta la
+/// migración real desde la versión inicial y comprueba que el esquema
+/// resultante es idéntico al v3 exportado (tablas, columnas e índices).
 void main() {
   late SchemaVerifier verifier;
 
@@ -15,13 +20,13 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('v1 -> v2 conserva los datos y crea venta_pagos vacía y usable', () async {
-    final schema = await verifier.schemaAt(1);
+  const t = '2026-01-15T10:00:00.000Z';
 
-    // Datos "reales" de una instalación v1: negocio, usuario, producto, caja
-    // abierta, una venta con su ítem y su movimiento de caja.
-    const t = '2026-01-15T10:00:00.000Z';
-    schema.rawDatabase.execute('''
+  /// Datos "reales" de una instalación: negocio, usuario, producto, caja
+  /// abierta, una venta con su ítem y su movimiento de caja (comunes a v1 y
+  /// v2: no usan tablas nuevas).
+  void sembrarBase(void Function(String) ejecutar) {
+    ejecutar('''
       INSERT INTO negocios (id, created_at, updated_at, nombre)
         VALUES ('n1', '$t', '$t', 'Colmado Test');
       INSERT INTO usuarios (id, created_at, updated_at, negocio_id, nombre,
@@ -45,14 +50,9 @@ void main() {
           tipo, monto, referencia_id, usuario_id, fecha)
         VALUES ('m1', '$t', '$t', 'c1', 'venta', 300, 'v1', 'u1', '$t');
     ''');
+  }
 
-    final db = AppDatabase.forTesting(schema.newConnection());
-    addTearDown(db.close);
-    // Valida que el esquema resultante es idéntico al v2 exportado (tablas,
-    // columnas, índices).
-    await verifier.migrateAndValidate(db, 2);
-
-    // Nada se perdió.
+  Future<void> verificarDatosBase(AppDatabase db) async {
     final ventas = await db.select(db.ventas).get();
     expect(ventas, hasLength(1));
     expect(ventas.single.id, 'v1');
@@ -68,29 +68,74 @@ void main() {
     expect(movimientos.single.tipo, TipoCajaMovimiento.venta);
     final producto = await db.select(db.productos).getSingle();
     expect(producto.stockActual, 8.0);
-    expect((await db.select(db.usuarios).get()), hasLength(1));
-    expect((await db.select(db.negocios).get()), hasLength(1));
+    expect(await db.select(db.usuarios).get(), hasLength(1));
+    expect(await db.select(db.negocios).get(), hasLength(1));
+  }
 
-    // La tabla nueva existe, está vacía y es usable.
-    expect(await db.select(db.ventaPagos).get(), isEmpty);
+  /// Las tablas de fiado existen, están vacías y son usables.
+  Future<void> verificarFiadoUsable(AppDatabase db) async {
+    expect(await db.select(db.clientes).get(), isEmpty);
+    expect(await db.select(db.movimientosCliente).get(), isEmpty);
     await db
-        .into(db.ventaPagos)
+        .into(db.clientes)
         .insert(
-          VentaPagosCompanion.insert(
-            ventaId: 'v1',
-            metodo: MetodoPago.tarjeta,
+          ClientesCompanion.insert(nombre: 'Doña Rosa', telefono: const Value('809-555-0101')),
+        );
+    final cliente = await db.select(db.clientes).getSingle();
+    await db
+        .into(db.movimientosCliente)
+        .insert(
+          MovimientosClienteCompanion.insert(
+            clienteId: cliente.id,
+            tipo: TipoMovimientoCliente.cargo,
             monto: 300,
+            ventaId: const Value('v1'),
+            usuarioId: 'u1',
           ),
         );
+    final mov = await db.select(db.movimientosCliente).getSingle();
+    expect(mov.monto, 300);
+    expect(mov.tipo, TipoMovimientoCliente.cargo);
+  }
+
+  test('v1 -> v3 conserva los datos y crea las tablas nuevas vacías', () async {
+    final schema = await verifier.schemaAt(1);
+    sembrarBase(schema.rawDatabase.execute);
+
+    final db = AppDatabase.forTesting(schema.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 3);
+
+    await verificarDatosBase(db);
+    expect(await db.select(db.ventaPagos).get(), isEmpty);
+    await verificarFiadoUsable(db);
+  });
+
+  test('v2 -> v3 conserva los datos (incluidas las filas de venta_pagos) y '
+      'crea las tablas de fiado vacías y usables', () async {
+    final schema = await verifier.schemaAt(2);
+    sembrarBase(schema.rawDatabase.execute);
+    schema.rawDatabase.execute('''
+      INSERT INTO venta_pagos (id, created_at, updated_at, venta_id, metodo,
+          monto)
+        VALUES ('vp1', '$t', '$t', 'v1', 'tarjeta', 300);
+    ''');
+
+    final db = AppDatabase.forTesting(schema.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 3);
+
+    await verificarDatosBase(db);
     final pagos = await db.select(db.ventaPagos).get();
     expect(pagos, hasLength(1));
+    expect(pagos.single.id, 'vp1');
     expect(pagos.single.metodo, MetodoPago.tarjeta);
     expect(pagos.single.monto, 300);
+    await verificarFiadoUsable(db);
   });
 
   test('una venta v1 (sin venta_pagos) se lee como EFECTIVO por el total', () async {
     final schema = await verifier.schemaAt(1);
-    const t = '2026-01-15T10:00:00.000Z';
     schema.rawDatabase.execute('''
       INSERT INTO negocios (id, created_at, updated_at, nombre)
         VALUES ('n1', '$t', '$t', 'Colmado Test');
@@ -109,7 +154,7 @@ void main() {
 
     final db = AppDatabase.forTesting(schema.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 2);
+    await verifier.migrateAndValidate(db, 3);
 
     final local = SalesLocalDatasource(db);
     expect(await local.obtenerPagos('v1', 1234), [
@@ -118,20 +163,25 @@ void main() {
     expect(await local.metodoDePago('v1', 1234), MetodoPago.efectivo);
   });
 
-  test('una base nueva (onCreate) ya trae venta_pagos con su índice', () async {
+  test('una base nueva (onCreate) trae venta_pagos y las tablas de fiado con '
+      'sus índices', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
 
     expect(await db.select(db.ventaPagos).get(), isEmpty);
+    expect(await db.select(db.clientes).get(), isEmpty);
+    expect(await db.select(db.movimientosCliente).get(), isEmpty);
     final indices = await db
-        .customSelect(
-          "SELECT name FROM sqlite_master WHERE type = 'index' "
-          "AND tbl_name = 'venta_pagos'",
-        )
+        .customSelect("SELECT name FROM sqlite_master WHERE type = 'index'")
         .get();
     expect(
       indices.map((f) => f.read<String>('name')),
-      contains('idx_venta_pagos_venta'),
+      containsAll([
+        'idx_venta_pagos_venta',
+        'idx_clientes_nombre',
+        'idx_movimientos_cliente_cliente',
+        'idx_movimientos_cliente_fecha',
+      ]),
     );
   });
 }

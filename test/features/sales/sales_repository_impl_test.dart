@@ -32,6 +32,7 @@ class _DatasourceQueLanzaProductoInexistente extends SalesLocalDatasource {
     required String usuarioId,
     required bool permitirStockNegativo,
     MetodoPago metodoPago = MetodoPago.efectivo,
+    String? clienteId,
   }) {
     throw ProductoInexistenteException(productoId);
   }

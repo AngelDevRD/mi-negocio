@@ -130,3 +130,28 @@ Map<String, dynamic> pagoEmpleadoPayload(PagosEmpleado p) => {
   'created_at': p.createdAt.toIso8601String(),
   'updated_at': p.updatedAt.toIso8601String(),
 };
+
+Map<String, dynamic> clientePayload(Cliente c) => {
+  'nombre': c.nombre,
+  'telefono': c.telefono,
+  'nota': c.nota,
+  'limite_credito': c.limiteCredito,
+  'activo': c.activo,
+  'created_at': c.createdAt.toIso8601String(),
+  'updated_at': c.updatedAt.toIso8601String(),
+  'deleted_at': c.deletedAt?.toIso8601String(),
+};
+
+Map<String, dynamic> movimientoClientePayload(MovimientoClienteData m) => {
+  'cliente_id': m.clienteId,
+  'tipo': m.tipo.name,
+  'monto': m.monto,
+  'venta_id': m.ventaId,
+  'metodo_pago': m.metodoPago?.name,
+  'caja_sesion_id': m.cajaSesionId,
+  'usuario_id': m.usuarioId,
+  'nota': m.nota,
+  'fecha': m.fecha.toIso8601String(),
+  'created_at': m.createdAt.toIso8601String(),
+  'updated_at': m.updatedAt.toIso8601String(),
+};

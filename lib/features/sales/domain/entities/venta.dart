@@ -41,6 +41,9 @@ abstract class Venta with _$Venta {
 
     /// Solo se carga en el detalle (`obtenerVenta`); `null` en las listas.
     MetodoPago? metodoPago,
+
+    /// Cliente al que se le fió la venta (solo en el detalle, si fue a crédito).
+    String? clienteNombre,
   }) = _Venta;
 }
 

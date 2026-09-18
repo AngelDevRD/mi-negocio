@@ -7,6 +7,7 @@ import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/payloads/auditoria_payload.dart';
 import '../../../../core/sync/payloads/operacion_payloads.dart';
 import '../../../../core/sync/sync_queue_writer.dart';
+import '../../../customers/data/datasources/customers_local_datasource.dart';
 import '../../../inventory/data/datasources/inventory_local_datasource.dart';
 
 /// Ítem de entrada para [SalesLocalDatasource.registrarVenta].
@@ -48,6 +49,28 @@ class StockInsuficienteException implements Exception {
   final String unidad;
   final double disponible;
   final double solicitado;
+}
+
+/// Venta a crédito con un cliente inexistente, eliminado o inactivo: no se
+/// escribe nada.
+class ClienteNoDisponibleException implements Exception {
+  const ClienteNoDisponibleException(this.clienteId);
+
+  final String clienteId;
+}
+
+/// Venta a crédito que deja el saldo del cliente por encima de su límite de
+/// crédito: no se escribe nada.
+class LimiteCreditoExcedidoException implements Exception {
+  const LimiteCreditoExcedidoException({
+    required this.nombre,
+    required this.saldo,
+    required this.limite,
+  });
+
+  final String nombre;
+  final int saldo;
+  final int limite;
 }
 
 /// Acceso a `ventas`/`venta_items` (RF-VEN) y a la apertura mínima de
@@ -92,6 +115,56 @@ class SalesLocalDatasource {
     )..where((t) => t.ventaId.equals(ventaId))).get();
     if (filas.isEmpty) return [(metodo: MetodoPago.efectivo, monto: total)];
     return [for (final f in filas) (metodo: f.metodo, monto: f.monto)];
+  }
+
+  Future<void> _insertarMovimientoCliente({
+    required String clienteId,
+    required TipoMovimientoCliente tipo,
+    required int monto,
+    required String ventaId,
+    required String usuarioId,
+  }) async {
+    final movId = generateUuidV4();
+    await _db
+        .into(_db.movimientosCliente)
+        .insert(
+          MovimientosClienteCompanion.insert(
+            id: Value(movId),
+            clienteId: clienteId,
+            tipo: tipo,
+            monto: monto,
+            ventaId: Value(ventaId),
+            usuarioId: usuarioId,
+          ),
+        );
+    final fila = await (_db.select(
+      _db.movimientosCliente,
+    )..where((t) => t.id.equals(movId))).getSingle();
+    await enqueueSync(
+      _db,
+      tabla: 'movimientos_cliente',
+      registroId: movId,
+      operacion: OperacionSync.insert,
+      payload: movimientoClientePayload(fila),
+    );
+  }
+
+  /// Nombre del cliente al que se le fió la venta, si fue a crédito.
+  Future<String?> nombreClienteDeVenta(String ventaId) async {
+    final query =
+        _db.select(_db.movimientosCliente).join([
+          innerJoin(
+            _db.clientes,
+            _db.clientes.id.equalsExp(_db.movimientosCliente.clienteId),
+          ),
+        ])..where(
+          _db.movimientosCliente.ventaId.equals(ventaId) &
+              _db.movimientosCliente.tipo.equalsValue(
+                TipoMovimientoCliente.cargo,
+              ),
+        );
+    final fila = await query.getSingleOrNull();
+    return fila?.readTable(_db.clientes).nombre;
   }
 
   /// Método de pago de la venta (el del primer pago; hoy hay uno solo).
@@ -172,6 +245,11 @@ class SalesLocalDatasource {
   /// inventario por ítem (`InventoryLocalDatasource.applyMovement`), entrada
   /// en `caja_movimientos` y auditoría.
   ///
+  /// Con [MetodoPago.credito] (fiado) exige un [clienteId] activo, valida el
+  /// límite de crédito DENTRO de la transacción (lanza
+  /// [ClienteNoDisponibleException] / [LimiteCreditoExcedidoException] sin
+  /// escribir nada) y registra un cargo (+total) en el libro del cliente.
+  ///
   /// [metodoPago]: se registra un pago por el total en `venta_pagos`; SOLO un
   /// pago en efectivo genera el movimiento de `caja_movimientos` (tarjeta y
   /// transferencia no entran a la caja física).
@@ -193,6 +271,7 @@ class SalesLocalDatasource {
     required String usuarioId,
     required bool permitirStockNegativo,
     MetodoPago metodoPago = MetodoPago.efectivo,
+    String? clienteId,
   }) {
     return _db.transaction(() async {
       final ventaId = generateUuidV4();
@@ -231,6 +310,28 @@ class SalesLocalDatasource {
               unidad: producto.unidad,
               disponible: producto.stockActual,
               solicitado: entrada.value,
+            );
+          }
+        }
+      }
+
+      if (metodoPago == MetodoPago.credito) {
+        final cliente = clienteId == null
+            ? null
+            : await (_db.select(_db.clientes)
+                    ..where((t) => t.id.equals(clienteId) & t.deletedAt.isNull()))
+                .getSingleOrNull();
+        if (cliente == null || !cliente.activo) {
+          throw ClienteNoDisponibleException(clienteId ?? '');
+        }
+        final limite = cliente.limiteCredito;
+        if (limite != null) {
+          final saldo = await saldoDeCliente(_db, cliente.id);
+          if (saldo + total > limite) {
+            throw LimiteCreditoExcedidoException(
+              nombre: cliente.nombre,
+              saldo: saldo,
+              limite: limite,
             );
           }
         }
@@ -283,6 +384,16 @@ class SalesLocalDatasource {
         operacion: OperacionSync.insert,
         payload: ventaPagoPayload(pagoFila),
       );
+
+      if (metodoPago == MetodoPago.credito) {
+        await _insertarMovimientoCliente(
+          clienteId: clienteId!,
+          tipo: TipoMovimientoCliente.cargo,
+          monto: total,
+          ventaId: ventaId,
+          usuarioId: usuarioId,
+        );
+      }
 
       for (final item in items) {
         final itemId = generateUuidV4();
@@ -428,6 +539,33 @@ class SalesLocalDatasource {
         operacion: OperacionSync.update,
         payload: ventaPayload(ventaFila),
       );
+
+      // Lo cobrado a crédito se compensa en el libro del cliente (no toca la
+      // caja: el fiado nunca entró a ella).
+      final pagos = await obtenerPagos(id, venta.total);
+      final enCredito = pagos
+          .where((p) => p.metodo == MetodoPago.credito)
+          .fold<int>(0, (suma, p) => suma + p.monto);
+      if (enCredito > 0) {
+        final cargo =
+            await (_db.select(_db.movimientosCliente)
+                  ..where(
+                    (t) =>
+                        t.ventaId.equals(id) &
+                        t.tipo.equalsValue(TipoMovimientoCliente.cargo),
+                  )
+                  ..limit(1))
+                .getSingleOrNull();
+        if (cargo != null) {
+          await _insertarMovimientoCliente(
+            clienteId: cargo.clienteId,
+            tipo: TipoMovimientoCliente.anulacion,
+            monto: -enCredito,
+            ventaId: id,
+            usuarioId: usuarioId,
+          );
+        }
+      }
 
       // Solo lo cobrado en efectivo entró a la caja: solo eso se compensa.
       final enEfectivo = await _montoEnEfectivo(id, venta.total);

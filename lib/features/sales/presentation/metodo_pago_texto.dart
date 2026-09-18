@@ -6,5 +6,6 @@ extension MetodoPagoTexto on MetodoPago {
     MetodoPago.efectivo => 'Efectivo',
     MetodoPago.tarjeta => 'Tarjeta',
     MetodoPago.transferencia => 'Transferencia',
+    MetodoPago.credito => 'Fiado',
   };
 }

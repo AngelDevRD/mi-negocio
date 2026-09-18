@@ -178,6 +178,7 @@ class _SesionAbiertaView extends StatelessWidget {
     TipoCajaMovimiento.entradaManual => Icons.add_circle_outline,
     TipoCajaMovimiento.salidaManual => Icons.remove_circle_outline,
     TipoCajaMovimiento.retiroCierre => Icons.lock_outline,
+    TipoCajaMovimiento.abonoCliente => Icons.payments_outlined,
   };
 
   String _tituloMovimiento(TipoCajaMovimiento tipo) => switch (tipo) {
@@ -188,5 +189,6 @@ class _SesionAbiertaView extends StatelessWidget {
     TipoCajaMovimiento.entradaManual => 'Entrada manual',
     TipoCajaMovimiento.salidaManual => 'Salida manual',
     TipoCajaMovimiento.retiroCierre => 'Retiro de cierre',
+    TipoCajaMovimiento.abonoCliente => 'Abono de cliente',
   };
 }

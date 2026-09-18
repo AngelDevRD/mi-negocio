@@ -26,7 +26,9 @@ enum TipoVenta { rapida, detallada }
 
 /// Método con el que se pagó una venta (`venta_pagos`). Una venta sin filas
 /// en `venta_pagos` (todas las anteriores a la v2) se trata como efectivo.
-enum MetodoPago { efectivo, tarjeta, transferencia }
+/// `credito` = fiado: no entra a la caja y genera un cargo al cliente. Un
+/// abono de cliente NUNCA puede ser `credito`.
+enum MetodoPago { efectivo, tarjeta, transferencia, credito }
 
 enum EstadoVenta { completada, anulada }
 
@@ -42,7 +44,14 @@ enum TipoCajaMovimiento {
   entradaManual,
   salidaManual,
   retiroCierre,
+
+  /// Abono en efectivo de un cliente con fiado.
+  abonoCliente,
 }
+
+/// Tipo de movimiento del libro de cuenta de un cliente (fiado). El monto
+/// lleva signo: cargo (+, el cliente debe más), abono y anulación (-).
+enum TipoMovimientoCliente { cargo, abono, anulacion }
 
 enum TipoEmpleado { ventas, delivery }
 

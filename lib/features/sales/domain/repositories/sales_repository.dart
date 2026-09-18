@@ -26,6 +26,9 @@ abstract interface class SalesRepository {
     String? nota,
     required String usuarioId,
     MetodoPago metodoPago = MetodoPago.efectivo,
+
+    /// Obligatorio con [MetodoPago.credito] (fiado).
+    String? clienteId,
   });
 
   /// Anula una venta completada (RF-VEN/RN-10, solo Administrador): revierte

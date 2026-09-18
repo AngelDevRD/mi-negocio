@@ -31,6 +31,7 @@ class SalesRepositoryImpl implements SalesRepository {
     (db.Venta, String) row, {
     List<VentaItem> items = const [],
     MetodoPago? metodoPago,
+    String? clienteNombre,
   }) {
     final (venta, usuarioNombre) = row;
     return Venta(
@@ -44,6 +45,7 @@ class SalesRepositoryImpl implements SalesRepository {
       fecha: venta.fecha,
       items: items,
       metodoPago: metodoPago,
+      clienteNombre: clienteNombre,
     );
   }
 
@@ -68,6 +70,9 @@ class SalesRepositoryImpl implements SalesRepository {
       fila,
       items: items.map(_itemAEntidad).toList(),
       metodoPago: metodo,
+      clienteNombre: metodo == MetodoPago.credito
+          ? await _local.nombreClienteDeVenta(id)
+          : null,
     );
   }
 
@@ -78,10 +83,16 @@ class SalesRepositoryImpl implements SalesRepository {
     String? nota,
     required String usuarioId,
     MetodoPago metodoPago = MetodoPago.efectivo,
+    String? clienteId,
   }) async {
     if (items.isEmpty) {
       return const Result.fail(
         ValidationFailure('La venta debe tener al menos un producto.'),
+      );
+    }
+    if (metodoPago == MetodoPago.credito && clienteId == null) {
+      return const Result.fail(
+        ValidationFailure('Selecciona el cliente al que se le fía la venta.'),
       );
     }
     for (final item in items) {
@@ -139,8 +150,21 @@ class SalesRepositoryImpl implements SalesRepository {
         usuarioId: usuarioId,
         permitirStockNegativo: permitirStockNegativo,
         metodoPago: metodoPago,
+        clienteId: clienteId,
       );
       return Result.ok(ventaId);
+    } on ClienteNoDisponibleException {
+      return const Result.fail(
+        ValidationFailure('El cliente no existe o está inactivo.'),
+      );
+    } on LimiteCreditoExcedidoException catch (e) {
+      return Result.fail(
+        BusinessRuleFailure(
+          'El fiado supera el límite de crédito de ${e.nombre}: saldo '
+          '${Money(e.saldo).format()}, límite ${Money(e.limite).format()}.',
+          rule: 'FIADO-LIMITE',
+        ),
+      );
     } on StockInsuficienteException catch (e) {
       final item = items.firstWhere((i) => i.productoId == e.productoId);
       return Result.fail(

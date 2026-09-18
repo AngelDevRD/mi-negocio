@@ -24,7 +24,7 @@ class _AuthFalso extends AuthController {
   );
 }
 
-Venta _venta({MetodoPago? metodoPago}) => Venta(
+Venta _venta({MetodoPago? metodoPago, String? clienteNombre}) => Venta(
   id: 'v1',
   tipo: TipoVenta.rapida,
   total: const Money(30000),
@@ -42,6 +42,7 @@ Venta _venta({MetodoPago? metodoPago}) => Venta(
     ),
   ],
   metodoPago: metodoPago,
+  clienteNombre: clienteNombre,
 );
 
 Future<void> _montar(WidgetTester tester, Venta venta) async {
@@ -155,6 +156,44 @@ void main() {
         tester.element(find.byType(AlertDialog)),
       ).colorScheme;
       expect(boton.style?.backgroundColor?.resolve({}), esquema.error);
+    });
+  });
+
+  group('fiado (crédito)', () {
+    testWidgets('muestra "Fiado · <cliente>" en el método de pago', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        _venta(metodoPago: MetodoPago.credito, clienteNombre: 'Doña Rosa'),
+      );
+
+      expect(find.text('Método de pago'), findsOneWidget);
+      expect(find.text('Fiado · Doña Rosa'), findsOneWidget);
+    });
+
+    testWidgets('sin nombre de cliente muestra solo "Fiado"', (tester) async {
+      await _montar(tester, _venta(metodoPago: MetodoPago.credito));
+
+      expect(find.text('Fiado'), findsOneWidget);
+    });
+
+    testWidgets('la anulación explica que revierte la deuda del cliente', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        _venta(metodoPago: MetodoPago.credito, clienteNombre: 'Doña Rosa'),
+      );
+      await tester.ensureVisible(find.text('Anular venta'));
+      await tester.tap(find.text('Anular venta'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('la deuda del cliente'), findsOneWidget);
+      expect(
+        find.textContaining('no afecta el efectivo de la caja'),
+        findsOneWidget,
+      );
     });
   });
 }

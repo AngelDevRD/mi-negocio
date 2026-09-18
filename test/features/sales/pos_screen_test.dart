@@ -96,6 +96,7 @@ class _VentasFalsas implements SalesRepository {
     String? nota,
     required String usuarioId,
     MetodoPago metodoPago = MetodoPago.efectivo,
+    String? clienteId,
   }) async {
     llamadas++;
     await pausa?.future;
