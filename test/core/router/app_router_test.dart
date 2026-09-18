@@ -88,6 +88,23 @@ Future<String> _resolver(
 }
 
 void main() {
+  group('venta detallada (alias del POS)', () {
+    for (final rol in RolUsuario.values) {
+      testWidgets('/ventas/detallada termina en /ventas/rapida ($rol)', (
+        tester,
+      ) async {
+        expect(
+          await _resolver(
+            tester,
+            AppRoutes.ventaDetallada,
+            sesion: SesionActiva(_usuario(rol)),
+          ),
+          AppRoutes.ventaRapida,
+        );
+      });
+    }
+  });
+
   group('cajero', () {
     final sesion = SesionActiva(_usuario(RolUsuario.cajero));
 

@@ -69,7 +69,7 @@ final ventaProvider = FutureProvider.autoDispose.family<Venta?, String>((
   return ref.watch(salesRepositoryProvider).obtenerVenta(id);
 });
 
-/// Estado del carrito de una venta nueva (rápida o detallada).
+/// Estado del carrito de una venta nueva.
 class CarritoVentaState {
   const CarritoVentaState({this.items = const [], this.nota});
 
@@ -154,12 +154,8 @@ class CarritoVentaController extends Notifier<CarritoVentaState> {
   }
 }
 
-final ventaRapidaCarritoProvider =
-    NotifierProvider<CarritoVentaController, CarritoVentaState>(
-      CarritoVentaController.new,
-    );
-
-final ventaDetalladaCarritoProvider =
+/// Único carrito de venta: lo usa el punto de venta (PosScreen).
+final carritoVentaProvider =
     NotifierProvider<CarritoVentaController, CarritoVentaState>(
       CarritoVentaController.new,
     );

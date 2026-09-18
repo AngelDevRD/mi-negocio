@@ -39,8 +39,7 @@ import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_detail_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/purchases/presentation/screens/purchases_list_screen.dart';
-import '../../features/sales/presentation/screens/detailed_sale_screen.dart';
-import '../../features/sales/presentation/screens/quick_sale_screen.dart';
+import '../../features/sales/presentation/screens/pos_screen.dart';
 import '../../features/sales/presentation/screens/sale_detail_screen.dart';
 import '../../features/sales/presentation/screens/sales_list_screen.dart';
 import '../database/enums.dart';
@@ -293,11 +292,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.ventaRapida,
-        builder: (context, state) => const QuickSaleScreen(),
+        builder: (context, state) => const PosScreen(),
       ),
+      // Alias de compatibilidad: la venta detallada se fusionó con el POS.
       GoRoute(
         path: AppRoutes.ventaDetallada,
-        builder: (context, state) => const DetailedSaleScreen(),
+        redirect: (context, state) => AppRoutes.ventaRapida,
       ),
       GoRoute(
         path: '/ventas/:id',

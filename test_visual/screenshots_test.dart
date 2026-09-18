@@ -162,9 +162,69 @@ void main() {
     );
   });
 
-  // Al final a propósito: las pantallas de venta rápida/detallada hacen
-  // ref.read en dispose() (aserción de Riverpod 3) y su desmontaje deja
-  // observers huérfanos que no deben contaminar a otros escenarios.
+  testWidgets('teléfono · administrador · punto de venta', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · punto de venta',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.ir('/ventas/rapida', apilar: true);
+        await sesion.capturar('pos_vacio');
+
+        await _agregarAlCarrito(sesion);
+        await sesion.capturar('pos_telefono');
+
+        await sesion.tocarTexto('3 artículos');
+        await sesion.capturar('pos_hoja_carrito');
+      },
+    );
+  });
+
+  testWidgets('escritorio · administrador · punto de venta', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'escritorio · administrador · punto de venta',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.escritorio,
+      cuerpo: (sesion) async {
+        await sesion.ir('/ventas/rapida', apilar: true);
+        await sesion.capturar('pos_vacio');
+
+        await _agregarAlCarrito(sesion);
+        await sesion.capturar('pos_escritorio');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · punto de venta · texto 1.6', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · punto de venta · texto 1.6',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      textScale: 1.6,
+      cuerpo: (sesion) async {
+        await sesion.ir('/ventas/rapida', apilar: true);
+        await _agregarAlCarrito(sesion);
+        await sesion.capturar('pos_texto_grande');
+
+        await sesion.tocarTexto('3 artículos');
+        await sesion.capturar('pos_texto_grande_hoja');
+      },
+    );
+  });
+
+  // Al final a propósito: un desmontaje abortado deja observers huérfanos que
+  // no deben contaminar a otros escenarios.
   testWidgets('teléfono · administrador · pantallas apiladas', (tester) async {
     final base = (await tester.runAsync(crearBaseDemo))!;
     await escenarioVisual(
@@ -182,12 +242,22 @@ void main() {
         await sesion.ir('/productos/nuevo', apilar: true);
         await sesion.capturar('admin_producto_nuevo');
 
-        await sesion.ir('/ventas/rapida', apilar: true);
-        await sesion.capturar('admin_venta_rapida');
-
         await sesion.ir('/caja/cerrar', apilar: true);
         await sesion.capturar('admin_cierre_caja');
       },
     );
   });
+}
+
+/// Agrega tres productos al carrito del POS (toca la tarjeta y confirma la
+/// cantidad por defecto del diálogo).
+Future<void> _agregarAlCarrito(SesionVisual sesion) async {
+  for (final producto in [
+    'Arroz selecto',
+    'Habichuelas rojas',
+    'Aceite vegetal 1 L',
+  ]) {
+    await sesion.tocarTexto(producto);
+    await sesion.tocarTexto('Agregar');
+  }
 }

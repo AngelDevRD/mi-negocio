@@ -1,12 +1,14 @@
+import 'package:app_gestion/core/database/enums.dart';
 import 'package:app_gestion/core/utils/money.dart';
+import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
+import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
 import 'package:app_gestion/features/dashboard/domain/entities/dashboard_data.dart';
 import 'package:app_gestion/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:app_gestion/features/products/domain/entities/producto.dart';
 import 'package:app_gestion/features/products/domain/repositories/products_repository.dart';
 import 'package:app_gestion/features/products/presentation/providers/products_providers.dart';
 import 'package:app_gestion/features/products/presentation/screens/products_list_screen.dart';
-import 'package:app_gestion/features/sales/presentation/screens/detailed_sale_screen.dart';
-import 'package:app_gestion/features/sales/presentation/screens/quick_sale_screen.dart';
+import 'package:app_gestion/features/sales/presentation/screens/pos_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -42,6 +44,20 @@ class _RepoFalso implements ProductsRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _AuthFalso extends AuthController {
+  @override
+  Future<EstadoSesion> build() async => const SesionActiva(
+    Usuario(
+      id: 'u1',
+      negocioId: 'n1',
+      nombre: 'Ana Admin',
+      username: 'ana',
+      rol: RolUsuario.administrador,
+      activo: true,
+    ),
+  );
+}
+
 Producto _producto(String nombre, {bool activo = true}) => Producto(
   id: nombre,
   nombre: nombre,
@@ -70,6 +86,7 @@ List<Override> _overrides() => [
     ]),
   ),
   cajaActualProvider.overrideWith((ref) => Stream.value(_caja)),
+  authControllerProvider.overrideWith(_AuthFalso.new),
 ];
 
 Future<void> _superficieAncha(WidgetTester tester) async {
@@ -93,7 +110,7 @@ void main() {
             home: Row(
               children: [
                 Expanded(child: ProductsListScreen()),
-                Expanded(child: QuickSaleScreen()),
+                Expanded(child: PosScreen()),
               ],
             ),
           ),
@@ -104,18 +121,18 @@ void main() {
 
       // Ambas pantallas muestran los productos activos.
       expect(_en(ProductsListScreen, find.text('Salami')), findsOneWidget);
-      expect(_en(QuickSaleScreen, find.text('Salami')), findsOneWidget);
+      expect(_en(PosScreen, find.text('Salami')), findsOneWidget);
 
       await tester.enterText(
-        _en(QuickSaleScreen, find.byType(TextField)),
+        _en(PosScreen, find.widgetWithText(TextField, 'Buscar producto')),
         'arroz',
       );
       await tester.pump();
       await tester.pump();
 
       // La selección de venta sí se filtra...
-      expect(_en(QuickSaleScreen, find.text('Arroz')), findsOneWidget);
-      expect(_en(QuickSaleScreen, find.text('Salami')), findsNothing);
+      expect(_en(PosScreen, find.text('Arroz')), findsOneWidget);
+      expect(_en(PosScreen, find.text('Salami')), findsNothing);
 
       // ...pero la pestaña Productos y su filtro quedan intactos.
       final container = ProviderScope.containerOf(
@@ -135,14 +152,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(),
-          child: const MaterialApp(home: QuickSaleScreen()),
+          child: const MaterialApp(home: PosScreen()),
         ),
       );
       await tester.pump();
       await tester.pump();
 
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(QuickSaleScreen)),
+        tester.element(find.byType(PosScreen)),
       );
       // La pestaña Productos pasa a ver "todos" (activos e inactivos).
       container
@@ -171,9 +188,9 @@ void main() {
               builder: (context) => Scaffold(
                 body: Center(
                   child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(builder: (_) => pantalla),
-                    ),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute<void>(builder: (_) => pantalla)),
                     child: const Text('abrir'),
                   ),
                 ),
@@ -196,18 +213,16 @@ void main() {
       expect(find.text('abrir'), findsOneWidget);
     }
 
-    testWidgets('venta rápida', (tester) async {
-      await abrirYCerrar(tester, const QuickSaleScreen());
+    testWidgets('punto de venta', (tester) async {
+      await abrirYCerrar(tester, const PosScreen());
     });
 
-    testWidgets('venta detallada (y su diálogo de agregar producto)', (
-      tester,
-    ) async {
+    testWidgets('venta (y su diálogo de cantidad o monto)', (tester) async {
       await abrirYCerrar(
         tester,
-        const DetailedSaleScreen(),
+        const PosScreen(),
         interactuar: () async {
-          await tester.tap(find.text('Agregar producto'));
+          await tester.tap(find.text('Salami'));
           await tester.pumpAndSettle();
           expect(find.byType(AlertDialog), findsOneWidget);
           await tester.tap(find.text('Cancelar'));

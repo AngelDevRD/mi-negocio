@@ -10,38 +10,9 @@ import '../../domain/entities/venta.dart';
 import '../providers/sales_providers.dart';
 
 /// Lista de ventas (RF-VEN): filtro por estado y rango de fechas, más
-/// reciente primero. El FAB ofrece iniciar una venta rápida o detallada.
+/// reciente primero. El FAB abre directamente el punto de venta.
 class SalesListScreen extends ConsumerWidget {
   const SalesListScreen({super.key});
-
-  Future<void> _nuevaVenta(BuildContext context) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.point_of_sale),
-              title: const Text('Venta rápida'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.push(AppRoutes.ventaRapida);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: const Text('Venta detallada'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.push(AppRoutes.ventaDetallada);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,7 +24,7 @@ class SalesListScreen extends ConsumerWidget {
         // Sin Hero: las pestañas del shell siguen montadas y sus FAB
         // compartirían la etiqueta por defecto al abrir una ruta encima.
         heroTag: null,
-        onPressed: () => _nuevaVenta(context),
+        onPressed: () => context.push(AppRoutes.ventaRapida),
         icon: const Icon(Icons.add),
         label: const Text('Nueva venta'),
       ),
