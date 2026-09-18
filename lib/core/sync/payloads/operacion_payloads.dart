@@ -84,6 +84,14 @@ Map<String, dynamic> ventaItemPayload(VentaItem v) => {
   'updated_at': v.updatedAt.toIso8601String(),
 };
 
+Map<String, dynamic> ventaPagoPayload(VentaPago p) => {
+  'venta_id': p.ventaId,
+  'metodo': p.metodo.name,
+  'monto': p.monto,
+  'created_at': p.createdAt.toIso8601String(),
+  'updated_at': p.updatedAt.toIso8601String(),
+};
+
 Map<String, dynamic> gastoPayload(Gasto g) => {
   'categoria': g.categoria,
   'concepto': g.concepto,

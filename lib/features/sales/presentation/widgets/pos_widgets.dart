@@ -17,6 +17,7 @@ import '../../../products/domain/entities/producto.dart';
 import '../../../products/presentation/providers/products_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/entities/venta.dart';
+import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
 
 bool _esAdministrador(WidgetRef ref) =>
@@ -181,11 +182,11 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
   fase.establecer(FaseCobro.ingresandoMonto);
   try {
     final total = ref.read(carritoVentaProvider).total;
-    final recibido = await showDialog<Money>(
+    final cobro = await showDialog<ResultadoCobro>(
       context: context,
       builder: (_) => CobroDialog(total: total),
     );
-    if (recibido == null) return false;
+    if (cobro == null) return false;
 
     final usuarioId = switch (ref.read(authControllerProvider).value) {
       SesionActiva(:final usuario) => usuario.id,
@@ -196,7 +197,11 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
     fase.establecer(FaseCobro.registrando);
     final Result<String> resultado;
     try {
-      resultado = await registrar(tipo: TipoVenta.rapida, usuarioId: usuarioId);
+      resultado = await registrar(
+        tipo: TipoVenta.rapida,
+        usuarioId: usuarioId,
+        metodoPago: cobro.metodo,
+      );
     } catch (error, stackTrace) {
       // Excepción inesperada (p.ej. base de datos): no se sabe si la venta se
       // guardó, así que el carrito se conserva intacto y se avisa.
@@ -222,11 +227,10 @@ Future<bool> cobrarVenta(BuildContext context, WidgetRef ref) async {
       ok: (_) {
         carrito.limpiar();
         if (context.mounted) {
-          final cambio = recibido - total;
-          AppSnackbar.exito(
-            context,
-            'Venta registrada · Cambio ${cambio.format()}',
-          );
+          final detalle = cobro.metodo == MetodoPago.efectivo
+              ? 'Cambio ${(cobro.recibido - total).format()}'
+              : cobro.metodo.etiqueta;
+          AppSnackbar.exito(context, 'Venta registrada · $detalle');
         }
         return true;
       },
@@ -899,9 +903,20 @@ List<Money> montosRapidos(Money total) => [
     if (Money.fromPesos(billete) > total) Money.fromPesos(billete),
 ].take(3).toList();
 
-/// Diálogo de cobro: monto recibido → cambio. El campo abre con el total
-/// seleccionado (escribir el billete lo reemplaza), Enter confirma y los
-/// chips fijan el monto; el cambio es el dato principal.
+/// Resultado del diálogo de cobro: cómo se pagó y cuánto se recibió (en
+/// tarjeta/transferencia el cobro es exacto: recibido = total).
+class ResultadoCobro {
+  const ResultadoCobro({required this.metodo, required this.recibido});
+
+  final MetodoPago metodo;
+  final Money recibido;
+}
+
+/// Diálogo de cobro. Arriba el método de pago (Efectivo por defecto). En
+/// efectivo: monto recibido → cambio; el campo abre con el total seleccionado
+/// (escribir el billete lo reemplaza), Enter confirma y los chips fijan el
+/// monto; el cambio es el dato principal. Con tarjeta o transferencia el cobro
+/// es exacto: no hay monto recibido, chips ni cambio.
 class CobroDialog extends StatefulWidget {
   const CobroDialog({super.key, required this.total});
 
@@ -916,6 +931,7 @@ class _CobroDialogState extends State<CobroDialog> {
   late final _montoController = TextEditingController(
     text: widget.total.format(symbol: false),
   );
+  MetodoPago _metodo = MetodoPago.efectivo;
 
   @override
   void initState() {
@@ -954,14 +970,23 @@ class _CobroDialogState extends State<CobroDialog> {
   }
 
   void _confirmar() {
+    if (_metodo != MetodoPago.efectivo) {
+      Navigator.of(
+        context,
+      ).pop(ResultadoCobro(metodo: _metodo, recibido: widget.total));
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
-    Navigator.of(context).pop(_recibidoActual());
+    Navigator.of(
+      context,
+    ).pop(ResultadoCobro(metodo: _metodo, recibido: _recibidoActual()!));
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final efectivo = _metodo == MetodoPago.efectivo;
     final recibido = _recibidoActual();
     final diferencia = recibido != null ? recibido - widget.total : null;
     final montos = [widget.total, ...montosRapidos(widget.total)];
@@ -1005,6 +1030,25 @@ class _CobroDialogState extends State<CobroDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // FittedBox: con texto grande el selector se reduce en vez de
+              // desbordar el diálogo.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SegmentedButton<MetodoPago>(
+                  showSelectedIcon: false,
+                  segments: [
+                    for (final metodo in MetodoPago.values)
+                      ButtonSegment(
+                        value: metodo,
+                        label: Text(metodo.etiqueta),
+                      ),
+                  ],
+                  selected: {_metodo},
+                  onSelectionChanged: (seleccion) =>
+                      setState(() => _metodo = seleccion.single),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Text('Total', style: textTheme.titleMedium),
@@ -1021,49 +1065,57 @@ class _CobroDialogState extends State<CobroDialog> {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _montoController,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Monto recibido',
-                  prefixText: 'RD\$ ',
+              if (efectivo) ...[
+                TextFormField(
+                  controller: _montoController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Monto recibido',
+                    prefixText: 'RD\$ ',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Obligatorio';
+                    final monto = _recibidoActual();
+                    if (monto == null) return 'Monto inválido';
+                    if (monto < widget.total) return 'Monto insuficiente';
+                    return null;
+                  },
+                  onChanged: (_) => setState(() {}),
+                  onFieldSubmitted: (_) => _confirmar(),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                  final monto = _recibidoActual();
-                  if (monto == null) return 'Monto inválido';
-                  if (monto < widget.total) return 'Monto insuficiente';
-                  return null;
-                },
-                onChanged: (_) => setState(() {}),
-                onFieldSubmitted: (_) => _confirmar(),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.xs,
-                children: [
-                  for (var i = 0; i < montos.length; i++)
-                    ChoiceChip(
-                      label: Text(
-                        i == 0
-                            ? 'Exacto'
-                            : formatoCantidad(montos[i].cents / 100),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (var i = 0; i < montos.length; i++)
+                      ChoiceChip(
+                        label: Text(
+                          i == 0
+                              ? 'Exacto'
+                              : formatoCantidad(montos[i].cents / 100),
+                        ),
+                        selected: recibido == montos[i],
+                        onSelected: (_) => _fijar(montos[i]),
                       ),
-                      selected: recibido == montos[i],
-                      onSelected: (_) => _fijar(montos[i]),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              cambio,
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                cambio,
+              ] else
+                Text(
+                  'Se cobra el total exacto.',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
         ),
@@ -1073,7 +1125,10 @@ class _CobroDialogState extends State<CobroDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(onPressed: _confirmar, child: const Text('Confirmar')),
+        FilledButton(
+          onPressed: _confirmar,
+          child: Text(efectivo ? 'Confirmar' : 'Confirmar pago'),
+        ),
       ],
     );
   }

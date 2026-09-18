@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
 
 /// Detalle de una venta (RF-VEN): ítems, total, ganancia (solo admin) y
@@ -126,6 +127,10 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
                 valor: venta.tipo == TipoVenta.rapida
                     ? 'Venta rápida'
                     : 'Venta detallada',
+              ),
+              _DetalleFila(
+                etiqueta: 'Método de pago',
+                valor: (venta.metodoPago ?? MetodoPago.efectivo).etiqueta,
               ),
               _DetalleFila(
                 etiqueta: 'Fecha',

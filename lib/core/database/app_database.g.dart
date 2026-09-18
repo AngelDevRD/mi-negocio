@@ -8708,6 +8708,416 @@ class VentaItemsCompanion extends UpdateCompanion<VentaItem> {
   }
 }
 
+class $VentaPagosTable extends VentaPagos
+    with TableInfo<$VentaPagosTable, VentaPago> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VentaPagosTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: generateUuidV4,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: () => DateTime.now().toUtc(),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: () => DateTime.now().toUtc(),
+  );
+  static const VerificationMeta _ventaIdMeta = const VerificationMeta(
+    'ventaId',
+  );
+  @override
+  late final GeneratedColumn<String> ventaId = GeneratedColumn<String>(
+    'venta_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES ventas (id)',
+    ),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<MetodoPago, String> metodo =
+      GeneratedColumn<String>(
+        'metodo',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<MetodoPago>($VentaPagosTable.$convertermetodo);
+  static const VerificationMeta _montoMeta = const VerificationMeta('monto');
+  @override
+  late final GeneratedColumn<int> monto = GeneratedColumn<int>(
+    'monto',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    createdAt,
+    updatedAt,
+    ventaId,
+    metodo,
+    monto,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'venta_pagos';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VentaPago> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('venta_id')) {
+      context.handle(
+        _ventaIdMeta,
+        ventaId.isAcceptableOrUnknown(data['venta_id']!, _ventaIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ventaIdMeta);
+    }
+    if (data.containsKey('monto')) {
+      context.handle(
+        _montoMeta,
+        monto.isAcceptableOrUnknown(data['monto']!, _montoMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_montoMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VentaPago map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VentaPago(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      ventaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}venta_id'],
+      )!,
+      metodo: $VentaPagosTable.$convertermetodo.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}metodo'],
+        )!,
+      ),
+      monto: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}monto'],
+      )!,
+    );
+  }
+
+  @override
+  $VentaPagosTable createAlias(String alias) {
+    return $VentaPagosTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<MetodoPago, String, String> $convertermetodo =
+      const EnumNameConverter<MetodoPago>(MetodoPago.values);
+}
+
+class VentaPago extends DataClass implements Insertable<VentaPago> {
+  final String id;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String ventaId;
+  final MetodoPago metodo;
+  final int monto;
+  const VentaPago({
+    required this.id,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.ventaId,
+    required this.metodo,
+    required this.monto,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['venta_id'] = Variable<String>(ventaId);
+    {
+      map['metodo'] = Variable<String>(
+        $VentaPagosTable.$convertermetodo.toSql(metodo),
+      );
+    }
+    map['monto'] = Variable<int>(monto);
+    return map;
+  }
+
+  VentaPagosCompanion toCompanion(bool nullToAbsent) {
+    return VentaPagosCompanion(
+      id: Value(id),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      ventaId: Value(ventaId),
+      metodo: Value(metodo),
+      monto: Value(monto),
+    );
+  }
+
+  factory VentaPago.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VentaPago(
+      id: serializer.fromJson<String>(json['id']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      ventaId: serializer.fromJson<String>(json['ventaId']),
+      metodo: $VentaPagosTable.$convertermetodo.fromJson(
+        serializer.fromJson<String>(json['metodo']),
+      ),
+      monto: serializer.fromJson<int>(json['monto']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'ventaId': serializer.toJson<String>(ventaId),
+      'metodo': serializer.toJson<String>(
+        $VentaPagosTable.$convertermetodo.toJson(metodo),
+      ),
+      'monto': serializer.toJson<int>(monto),
+    };
+  }
+
+  VentaPago copyWith({
+    String? id,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? ventaId,
+    MetodoPago? metodo,
+    int? monto,
+  }) => VentaPago(
+    id: id ?? this.id,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    ventaId: ventaId ?? this.ventaId,
+    metodo: metodo ?? this.metodo,
+    monto: monto ?? this.monto,
+  );
+  VentaPago copyWithCompanion(VentaPagosCompanion data) {
+    return VentaPago(
+      id: data.id.present ? data.id.value : this.id,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      ventaId: data.ventaId.present ? data.ventaId.value : this.ventaId,
+      metodo: data.metodo.present ? data.metodo.value : this.metodo,
+      monto: data.monto.present ? data.monto.value : this.monto,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VentaPago(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('ventaId: $ventaId, ')
+          ..write('metodo: $metodo, ')
+          ..write('monto: $monto')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, createdAt, updatedAt, ventaId, metodo, monto);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VentaPago &&
+          other.id == this.id &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.ventaId == this.ventaId &&
+          other.metodo == this.metodo &&
+          other.monto == this.monto);
+}
+
+class VentaPagosCompanion extends UpdateCompanion<VentaPago> {
+  final Value<String> id;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<String> ventaId;
+  final Value<MetodoPago> metodo;
+  final Value<int> monto;
+  final Value<int> rowid;
+  const VentaPagosCompanion({
+    this.id = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.ventaId = const Value.absent(),
+    this.metodo = const Value.absent(),
+    this.monto = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VentaPagosCompanion.insert({
+    this.id = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    required String ventaId,
+    required MetodoPago metodo,
+    required int monto,
+    this.rowid = const Value.absent(),
+  }) : ventaId = Value(ventaId),
+       metodo = Value(metodo),
+       monto = Value(monto);
+  static Insertable<VentaPago> custom({
+    Expression<String>? id,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? ventaId,
+    Expression<String>? metodo,
+    Expression<int>? monto,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (ventaId != null) 'venta_id': ventaId,
+      if (metodo != null) 'metodo': metodo,
+      if (monto != null) 'monto': monto,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VentaPagosCompanion copyWith({
+    Value<String>? id,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<String>? ventaId,
+    Value<MetodoPago>? metodo,
+    Value<int>? monto,
+    Value<int>? rowid,
+  }) {
+    return VentaPagosCompanion(
+      id: id ?? this.id,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      ventaId: ventaId ?? this.ventaId,
+      metodo: metodo ?? this.metodo,
+      monto: monto ?? this.monto,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (ventaId.present) {
+      map['venta_id'] = Variable<String>(ventaId.value);
+    }
+    if (metodo.present) {
+      map['metodo'] = Variable<String>(
+        $VentaPagosTable.$convertermetodo.toSql(metodo.value),
+      );
+    }
+    if (monto.present) {
+      map['monto'] = Variable<int>(monto.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VentaPagosCompanion(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('ventaId: $ventaId, ')
+          ..write('metodo: $metodo, ')
+          ..write('monto: $monto, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $GastosTable extends Gastos with TableInfo<$GastosTable, Gasto> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -12426,6 +12836,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CompraItemsTable compraItems = $CompraItemsTable(this);
   late final $VentasTable ventas = $VentasTable(this);
   late final $VentaItemsTable ventaItems = $VentaItemsTable(this);
+  late final $VentaPagosTable ventaPagos = $VentaPagosTable(this);
   late final $GastosTable gastos = $GastosTable(this);
   late final $EmpleadosTable empleados = $EmpleadosTable(this);
   late final $PagosEmpleadosTable pagosEmpleados = $PagosEmpleadosTable(this);
@@ -12472,6 +12883,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_ventas_sesion',
     'CREATE INDEX idx_ventas_sesion ON ventas (caja_sesion_id)',
   );
+  late final Index idxVentaPagosVenta = Index(
+    'idx_venta_pagos_venta',
+    'CREATE INDEX idx_venta_pagos_venta ON venta_pagos (venta_id)',
+  );
   late final Index idxGastosFecha = Index(
     'idx_gastos_fecha',
     'CREATE INDEX idx_gastos_fecha ON gastos (fecha)',
@@ -12512,6 +12927,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     compraItems,
     ventas,
     ventaItems,
+    ventaPagos,
     gastos,
     empleados,
     pagosEmpleados,
@@ -12528,6 +12944,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxComprasFecha,
     idxVentasFecha,
     idxVentasSesion,
+    idxVentaPagosVenta,
     idxGastosFecha,
     idxPagosEmpleado,
     idxAuditoriaFecha,
@@ -20016,6 +20433,24 @@ final class $$VentasTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$VentaPagosTable, List<VentaPago>>
+  _ventaPagosRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.ventaPagos,
+    aliasName: $_aliasNameGenerator(db.ventas.id, db.ventaPagos.ventaId),
+  );
+
+  $$VentaPagosTableProcessedTableManager get ventaPagosRefs {
+    final manager = $$VentaPagosTableTableManager(
+      $_db,
+      $_db.ventaPagos,
+    ).filter((f) => f.ventaId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_ventaPagosRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$VentasTableFilterComposer
@@ -20136,6 +20571,31 @@ class $$VentasTableFilterComposer
           }) => $$VentaItemsTableFilterComposer(
             $db: $db,
             $table: $db.ventaItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ventaPagosRefs(
+    Expression<bool> Function($$VentaPagosTableFilterComposer f) f,
+  ) {
+    final $$VentaPagosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.ventaPagos,
+      getReferencedColumn: (t) => t.ventaId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VentaPagosTableFilterComposer(
+            $db: $db,
+            $table: $db.ventaPagos,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20353,6 +20813,31 @@ class $$VentasTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> ventaPagosRefs<T extends Object>(
+    Expression<T> Function($$VentaPagosTableAnnotationComposer a) f,
+  ) {
+    final $$VentaPagosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.ventaPagos,
+      getReferencedColumn: (t) => t.ventaId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VentaPagosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.ventaPagos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$VentasTableTableManager
@@ -20372,6 +20857,7 @@ class $$VentasTableTableManager
             bool cajaSesionId,
             bool usuarioId,
             bool ventaItemsRefs,
+            bool ventaPagosRefs,
           })
         > {
   $$VentasTableTableManager(_$AppDatabase db, $VentasTable table)
@@ -20452,10 +20938,14 @@ class $$VentasTableTableManager
                 cajaSesionId = false,
                 usuarioId = false,
                 ventaItemsRefs = false,
+                ventaPagosRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [if (ventaItemsRefs) db.ventaItems],
+                  explicitlyWatchedTables: [
+                    if (ventaItemsRefs) db.ventaItems,
+                    if (ventaPagosRefs) db.ventaPagos,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -20524,6 +21014,27 @@ class $$VentasTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (ventaPagosRefs)
+                        await $_getPrefetchedData<
+                          Venta,
+                          $VentasTable,
+                          VentaPago
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VentasTableReferences
+                              ._ventaPagosRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VentasTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ventaPagosRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.ventaId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -20548,6 +21059,7 @@ typedef $$VentasTableProcessedTableManager =
         bool cajaSesionId,
         bool usuarioId,
         bool ventaItemsRefs,
+        bool ventaPagosRefs,
       })
     >;
 typedef $$VentaItemsTableCreateCompanionBuilder =
@@ -21016,6 +21528,344 @@ typedef $$VentaItemsTableProcessedTableManager =
       (VentaItem, $$VentaItemsTableReferences),
       VentaItem,
       PrefetchHooks Function({bool ventaId, bool productoId})
+    >;
+typedef $$VentaPagosTableCreateCompanionBuilder =
+    VentaPagosCompanion Function({
+      Value<String> id,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      required String ventaId,
+      required MetodoPago metodo,
+      required int monto,
+      Value<int> rowid,
+    });
+typedef $$VentaPagosTableUpdateCompanionBuilder =
+    VentaPagosCompanion Function({
+      Value<String> id,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<String> ventaId,
+      Value<MetodoPago> metodo,
+      Value<int> monto,
+      Value<int> rowid,
+    });
+
+final class $$VentaPagosTableReferences
+    extends BaseReferences<_$AppDatabase, $VentaPagosTable, VentaPago> {
+  $$VentaPagosTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $VentasTable _ventaIdTable(_$AppDatabase db) => db.ventas.createAlias(
+    $_aliasNameGenerator(db.ventaPagos.ventaId, db.ventas.id),
+  );
+
+  $$VentasTableProcessedTableManager get ventaId {
+    final $_column = $_itemColumn<String>('venta_id')!;
+
+    final manager = $$VentasTableTableManager(
+      $_db,
+      $_db.ventas,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_ventaIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VentaPagosTableFilterComposer
+    extends Composer<_$AppDatabase, $VentaPagosTable> {
+  $$VentaPagosTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<MetodoPago, MetodoPago, String> get metodo =>
+      $composableBuilder(
+        column: $table.metodo,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<int> get monto => $composableBuilder(
+    column: $table.monto,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$VentasTableFilterComposer get ventaId {
+    final $$VentasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ventaId,
+      referencedTable: $db.ventas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VentasTableFilterComposer(
+            $db: $db,
+            $table: $db.ventas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VentaPagosTableOrderingComposer
+    extends Composer<_$AppDatabase, $VentaPagosTable> {
+  $$VentaPagosTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get metodo => $composableBuilder(
+    column: $table.metodo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get monto => $composableBuilder(
+    column: $table.monto,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$VentasTableOrderingComposer get ventaId {
+    final $$VentasTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ventaId,
+      referencedTable: $db.ventas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VentasTableOrderingComposer(
+            $db: $db,
+            $table: $db.ventas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VentaPagosTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VentaPagosTable> {
+  $$VentaPagosTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<MetodoPago, String> get metodo =>
+      $composableBuilder(column: $table.metodo, builder: (column) => column);
+
+  GeneratedColumn<int> get monto =>
+      $composableBuilder(column: $table.monto, builder: (column) => column);
+
+  $$VentasTableAnnotationComposer get ventaId {
+    final $$VentasTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ventaId,
+      referencedTable: $db.ventas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VentasTableAnnotationComposer(
+            $db: $db,
+            $table: $db.ventas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VentaPagosTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VentaPagosTable,
+          VentaPago,
+          $$VentaPagosTableFilterComposer,
+          $$VentaPagosTableOrderingComposer,
+          $$VentaPagosTableAnnotationComposer,
+          $$VentaPagosTableCreateCompanionBuilder,
+          $$VentaPagosTableUpdateCompanionBuilder,
+          (VentaPago, $$VentaPagosTableReferences),
+          VentaPago,
+          PrefetchHooks Function({bool ventaId})
+        > {
+  $$VentaPagosTableTableManager(_$AppDatabase db, $VentaPagosTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VentaPagosTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VentaPagosTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VentaPagosTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String> ventaId = const Value.absent(),
+                Value<MetodoPago> metodo = const Value.absent(),
+                Value<int> monto = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VentaPagosCompanion(
+                id: id,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                ventaId: ventaId,
+                metodo: metodo,
+                monto: monto,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                required String ventaId,
+                required MetodoPago metodo,
+                required int monto,
+                Value<int> rowid = const Value.absent(),
+              }) => VentaPagosCompanion.insert(
+                id: id,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                ventaId: ventaId,
+                metodo: metodo,
+                monto: monto,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VentaPagosTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({ventaId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (ventaId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.ventaId,
+                                referencedTable: $$VentaPagosTableReferences
+                                    ._ventaIdTable(db),
+                                referencedColumn: $$VentaPagosTableReferences
+                                    ._ventaIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$VentaPagosTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VentaPagosTable,
+      VentaPago,
+      $$VentaPagosTableFilterComposer,
+      $$VentaPagosTableOrderingComposer,
+      $$VentaPagosTableAnnotationComposer,
+      $$VentaPagosTableCreateCompanionBuilder,
+      $$VentaPagosTableUpdateCompanionBuilder,
+      (VentaPago, $$VentaPagosTableReferences),
+      VentaPago,
+      PrefetchHooks Function({bool ventaId})
     >;
 typedef $$GastosTableCreateCompanionBuilder =
     GastosCompanion Function({
@@ -23578,6 +24428,8 @@ class $AppDatabaseManager {
       $$VentasTableTableManager(_db, _db.ventas);
   $$VentaItemsTableTableManager get ventaItems =>
       $$VentaItemsTableTableManager(_db, _db.ventaItems);
+  $$VentaPagosTableTableManager get ventaPagos =>
+      $$VentaPagosTableTableManager(_db, _db.ventaPagos);
   $$GastosTableTableManager get gastos =>
       $$GastosTableTableManager(_db, _db.gastos);
   $$EmpleadosTableTableManager get empleados =>

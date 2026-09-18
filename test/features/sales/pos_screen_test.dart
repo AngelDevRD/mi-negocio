@@ -65,6 +65,7 @@ class _VentasFalsas implements SalesRepository {
           List<ItemVentaInput> items,
           String? nota,
           String usuarioId,
+          MetodoPago metodoPago,
         })
       >[];
 
@@ -94,6 +95,7 @@ class _VentasFalsas implements SalesRepository {
     required List<ItemVentaInput> items,
     String? nota,
     required String usuarioId,
+    MetodoPago metodoPago = MetodoPago.efectivo,
   }) async {
     llamadas++;
     await pausa?.future;
@@ -104,6 +106,7 @@ class _VentasFalsas implements SalesRepository {
       items: items,
       nota: nota,
       usuarioId: usuarioId,
+      metodoPago: metodoPago,
     ));
     return const Result.ok('venta-1');
   }
@@ -703,6 +706,66 @@ void main() {
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(_enCarrito('RD\$ 300.00'), findsNWidgets(2));
+    });
+  });
+
+  group('método de pago en el cobro', () {
+    Future<void> elegirMetodo(WidgetTester tester, String metodo) async {
+      await tester.tap(_boton('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SegmentedButton<MetodoPago>),
+          matching: find.text(metodo),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('tarjeta: registra la venta con método tarjeta y lo dice', (
+      tester,
+    ) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      await elegirMetodo(tester, 'Tarjeta');
+      await tester.tap(find.text('Confirmar pago'));
+      await tester.pumpAndSettle();
+
+      final venta = escenario.ventas.registradas.single;
+      expect(venta.metodoPago, MetodoPago.tarjeta);
+      expect(find.text('Venta registrada · Tarjeta'), findsOneWidget);
+      expect(find.text('Toca un producto para agregarlo'), findsOneWidget);
+    });
+
+    testWidgets('transferencia: registra método transferencia', (tester) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      await elegirMetodo(tester, 'Transferencia');
+      await tester.tap(find.text('Confirmar pago'));
+      await tester.pumpAndSettle();
+
+      expect(
+        escenario.ventas.registradas.single.metodoPago,
+        MetodoPago.transferencia,
+      );
+      expect(find.text('Venta registrada · Transferencia'), findsOneWidget);
+    });
+
+    testWidgets('efectivo (por defecto) conserva el flujo con cambio', (
+      tester,
+    ) async {
+      final escenario = await _montar(tester);
+      await _agregar(tester, 'Arroz');
+
+      await _cobrar(tester);
+
+      expect(
+        escenario.ventas.registradas.single.metodoPago,
+        MetodoPago.efectivo,
+      );
+      expect(find.text('Venta registrada · Cambio RD\$ 0.00'), findsOneWidget);
     });
   });
 

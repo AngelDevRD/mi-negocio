@@ -25,6 +25,7 @@ abstract interface class SalesRepository {
     required List<ItemVentaInput> items,
     String? nota,
     required String usuarioId,
+    MetodoPago metodoPago = MetodoPago.efectivo,
   });
 
   /// Anula una venta completada (RF-VEN/RN-10, solo Administrador): revierte

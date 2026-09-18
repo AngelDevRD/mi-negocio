@@ -1,0 +1,84 @@
+import 'package:app_gestion/core/database/enums.dart';
+import 'package:app_gestion/core/theme/app_theme.dart';
+import 'package:app_gestion/core/utils/money.dart';
+import 'package:app_gestion/features/auth/domain/entities/usuario.dart';
+import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
+import 'package:app_gestion/features/sales/domain/entities/venta.dart';
+import 'package:app_gestion/features/sales/presentation/providers/sales_providers.dart';
+import 'package:app_gestion/features/sales/presentation/screens/sale_detail_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class _AuthFalso extends AuthController {
+  @override
+  Future<EstadoSesion> build() async => const SesionActiva(
+    Usuario(
+      id: 'u1',
+      negocioId: 'n1',
+      nombre: 'Ana Admin',
+      username: 'ana',
+      rol: RolUsuario.administrador,
+      activo: true,
+    ),
+  );
+}
+
+Venta _venta({MetodoPago? metodoPago}) => Venta(
+  id: 'v1',
+  tipo: TipoVenta.rapida,
+  total: const Money(30000),
+  ganancia: const Money(10000),
+  estado: EstadoVenta.completada,
+  usuarioNombre: 'Ana Admin',
+  fecha: DateTime(2026, 1, 15, 10),
+  items: const [
+    VentaItem(
+      productoId: 'p1',
+      productoNombre: 'Salami',
+      cantidad: 2,
+      precioUnitario: Money(15000),
+      costoUnitario: Money(10000),
+    ),
+  ],
+  metodoPago: metodoPago,
+);
+
+Future<void> _montar(WidgetTester tester, Venta venta) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ventaProvider('v1').overrideWith((ref) async => venta),
+        authControllerProvider.overrideWith(_AuthFalso.new),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const SaleDetailScreen(ventaId: 'v1'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  for (final entrada in {
+    MetodoPago.efectivo: 'Efectivo',
+    MetodoPago.tarjeta: 'Tarjeta',
+    MetodoPago.transferencia: 'Transferencia',
+  }.entries) {
+    testWidgets('muestra "Método de pago: ${entrada.value}"', (tester) async {
+      await _montar(tester, _venta(metodoPago: entrada.key));
+
+      expect(find.text('Método de pago'), findsOneWidget);
+      expect(find.text(entrada.value), findsOneWidget);
+    });
+  }
+
+  testWidgets('una venta sin método cargado (histórica) se muestra como '
+      'Efectivo', (tester) async {
+    await _montar(tester, _venta());
+
+    expect(find.text('Método de pago'), findsOneWidget);
+    expect(find.text('Efectivo'), findsOneWidget);
+  });
+}

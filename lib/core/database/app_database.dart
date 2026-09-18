@@ -38,6 +38,7 @@ part 'app_database.g.dart';
     CompraItems,
     Ventas,
     VentaItems,
+    VentaPagos,
     Gastos,
     Empleados,
     PagosEmpleados,
@@ -54,11 +55,20 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
+      onCreate: (m) => m.createAll(),
+      onUpgrade: (m, from, to) async {
+        // v1 -> v2: método de pago de las ventas (tabla nueva; las ventas
+        // anteriores no tienen filas y se leen como efectivo).
+        if (from < 2) {
+          await m.createTable(ventaPagos);
+          await m.createIndex(idxVentaPagosVenta);
+        }
+      },
       beforeOpen: (details) async {
         // Integridad referencial real en SQLite (apagada por defecto).
         await customStatement('PRAGMA foreign_keys = ON');

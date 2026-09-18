@@ -1,11 +1,12 @@
+import 'package:app_gestion/core/database/enums.dart';
 import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/pos_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Monto devuelto por el diálogo (null = cancelado / aún abierto).
-Money? _resultado;
+/// Resultado devuelto por el diálogo (null = cancelado / aún abierto).
+ResultadoCobro? _resultado;
 
 Future<void> _abrir(WidgetTester tester, Money total) async {
   _resultado = null;
@@ -16,10 +17,11 @@ Future<void> _abrir(WidgetTester tester, Money total) async {
         builder: (context) => Scaffold(
           body: Center(
             child: ElevatedButton(
-              onPressed: () async => _resultado = await showDialog<Money>(
-                context: context,
-                builder: (_) => CobroDialog(total: total),
-              ),
+              onPressed: () async =>
+                  _resultado = await showDialog<ResultadoCobro>(
+                    context: context,
+                    builder: (_) => CobroDialog(total: total),
+                  ),
               child: const Text('abrir'),
             ),
           ),
@@ -72,7 +74,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CobroDialog), findsNothing);
-    expect(_resultado, const Money(50000));
+    expect(_resultado?.recibido, const Money(50000));
+    expect(_resultado?.metodo, MetodoPago.efectivo);
   });
 
   testWidgets('Enter con monto insuficiente NO confirma', (tester) async {
@@ -109,7 +112,8 @@ void main() {
 
     await tester.tap(find.text('Confirmar'));
     await tester.pumpAndSettle();
-    expect(_resultado, const Money(50000));
+    expect(_resultado?.recibido, const Money(50000));
+    expect(_resultado?.metodo, MetodoPago.efectivo);
   });
 
   testWidgets('"Exacto" vuelve al total (cambio 0)', (tester) async {
@@ -151,6 +155,83 @@ void main() {
 
     expect(find.text('Faltan RD\$ 160.00'), findsOneWidget);
     expect(find.text('--'), findsNothing);
+  });
+
+  group('método de pago', () {
+    Finder segmento(String texto) => find.descendant(
+      of: find.byType(SegmentedButton<MetodoPago>),
+      matching: find.text(texto),
+    );
+
+    testWidgets('abre con Efectivo seleccionado y los tres métodos', (
+      tester,
+    ) async {
+      await _abrir(tester, total260);
+
+      for (final texto in ['Efectivo', 'Tarjeta', 'Transferencia']) {
+        expect(segmento(texto), findsOneWidget, reason: texto);
+      }
+      final selector = tester.widget<SegmentedButton<MetodoPago>>(
+        find.byType(SegmentedButton<MetodoPago>),
+      );
+      expect(selector.selected, {MetodoPago.efectivo});
+      expect(find.text('Monto recibido'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Confirmar'), findsOneWidget);
+    });
+
+    testWidgets('tarjeta oculta monto recibido, chips y cambio; el botón dice '
+        '"Confirmar pago" y devuelve método tarjeta por el total', (
+      tester,
+    ) async {
+      await _abrir(tester, total260);
+
+      await tester.tap(segmento('Tarjeta'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Cambio'), findsNothing);
+      expect(find.text('Monto recibido'), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Confirmar pago'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FilledButton, 'Confirmar'), findsNothing);
+
+      await tester.tap(find.text('Confirmar pago'));
+      await tester.pumpAndSettle();
+
+      expect(_resultado?.metodo, MetodoPago.tarjeta);
+      expect(_resultado?.recibido, total260);
+    });
+
+    testWidgets('transferencia: mismo cobro exacto', (tester) async {
+      await _abrir(tester, total260);
+
+      await tester.tap(segmento('Transferencia'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar pago'));
+      await tester.pumpAndSettle();
+
+      expect(_resultado?.metodo, MetodoPago.transferencia);
+      expect(_resultado?.recibido, total260);
+    });
+
+    testWidgets('volver a Efectivo restablece monto, chips y cambio', (
+      tester,
+    ) async {
+      await _abrir(tester, total260);
+      await tester.tap(segmento('Tarjeta'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(segmento('Efectivo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(4));
+      expect(find.text('Cambio'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Confirmar'), findsOneWidget);
+    });
   });
 
   test('montosRapidos: 3 billetes menores que superan el total', () {

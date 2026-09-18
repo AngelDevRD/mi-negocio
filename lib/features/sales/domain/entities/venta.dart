@@ -38,6 +38,9 @@ abstract class Venta with _$Venta {
     required String usuarioNombre,
     required DateTime fecha,
     @Default([]) List<VentaItem> items,
+
+    /// Solo se carga en el detalle (`obtenerVenta`); `null` en las listas.
+    MetodoPago? metodoPago,
   }) = _Venta;
 }
 

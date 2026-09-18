@@ -84,6 +84,16 @@ class VentaItems extends BaseTable {
   IntColumn get costoUnitario => integer()();
 }
 
+/// Pago(s) de una venta: método y monto en centavos. Tabla aparte (no una
+/// columna de `ventas`) para no alterar el payload de sync de ventas y dejar
+/// lugar a pagos mixtos. Solo el pago en EFECTIVO entra a la caja.
+@TableIndex(name: 'idx_venta_pagos_venta', columns: {#ventaId})
+class VentaPagos extends BaseTable {
+  TextColumn get ventaId => text().references(Ventas, #id)();
+  TextColumn get metodo => textEnum<MetodoPago>()();
+  IntColumn get monto => integer()();
+}
+
 /// Gastos operativos (RF-GAS).
 @TableIndex(name: 'idx_gastos_fecha', columns: {#fecha})
 class Gastos extends SoftDeleteTable {

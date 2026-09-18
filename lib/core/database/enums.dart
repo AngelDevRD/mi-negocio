@@ -24,6 +24,10 @@ enum TipoMovimientoInventario {
 
 enum TipoVenta { rapida, detallada }
 
+/// Método con el que se pagó una venta (`venta_pagos`). Una venta sin filas
+/// en `venta_pagos` (todas las anteriores a la v2) se trata como efectivo.
+enum MetodoPago { efectivo, tarjeta, transferencia }
+
 enum EstadoVenta { completada, anulada }
 
 enum EstadoCompra { completada, anulada }

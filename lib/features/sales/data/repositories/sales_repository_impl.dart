@@ -30,6 +30,7 @@ class SalesRepositoryImpl implements SalesRepository {
   Venta _ventaAEntidad(
     (db.Venta, String) row, {
     List<VentaItem> items = const [],
+    MetodoPago? metodoPago,
   }) {
     final (venta, usuarioNombre) = row;
     return Venta(
@@ -42,6 +43,7 @@ class SalesRepositoryImpl implements SalesRepository {
       usuarioNombre: usuarioNombre,
       fecha: venta.fecha,
       items: items,
+      metodoPago: metodoPago,
     );
   }
 
@@ -61,7 +63,12 @@ class SalesRepositoryImpl implements SalesRepository {
     final fila = await _local.obtenerVenta(id);
     if (fila == null) return null;
     final items = await _local.obtenerItemsVenta(id);
-    return _ventaAEntidad(fila, items: items.map(_itemAEntidad).toList());
+    final metodo = await _local.metodoDePago(id, fila.$1.total);
+    return _ventaAEntidad(
+      fila,
+      items: items.map(_itemAEntidad).toList(),
+      metodoPago: metodo,
+    );
   }
 
   @override
@@ -70,6 +77,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required List<ItemVentaInput> items,
     String? nota,
     required String usuarioId,
+    MetodoPago metodoPago = MetodoPago.efectivo,
   }) async {
     if (items.isEmpty) {
       return const Result.fail(
@@ -130,6 +138,7 @@ class SalesRepositoryImpl implements SalesRepository {
         cajaSesionId: cajaSesionId,
         usuarioId: usuarioId,
         permitirStockNegativo: permitirStockNegativo,
+        metodoPago: metodoPago,
       );
       return Result.ok(ventaId);
     } on StockInsuficienteException catch (e) {

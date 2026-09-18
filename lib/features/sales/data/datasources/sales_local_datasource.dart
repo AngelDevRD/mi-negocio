@@ -80,6 +80,31 @@ class SalesLocalDatasource {
     return await query.getSingleOrNull() != null;
   }
 
+  /// Pagos de una venta. Regla de compatibilidad ÚNICA: una venta SIN filas en
+  /// `venta_pagos` (todas las anteriores a la v2) se trata como un pago en
+  /// EFECTIVO por su [total].
+  Future<List<({MetodoPago metodo, int monto})>> obtenerPagos(
+    String ventaId,
+    int total,
+  ) async {
+    final filas = await (_db.select(
+      _db.ventaPagos,
+    )..where((t) => t.ventaId.equals(ventaId))).get();
+    if (filas.isEmpty) return [(metodo: MetodoPago.efectivo, monto: total)];
+    return [for (final f in filas) (metodo: f.metodo, monto: f.monto)];
+  }
+
+  /// Método de pago de la venta (el del primer pago; hoy hay uno solo).
+  Future<MetodoPago> metodoDePago(String ventaId, int total) async =>
+      (await obtenerPagos(ventaId, total)).first.metodo;
+
+  Future<int> _montoEnEfectivo(String ventaId, int total) async {
+    final pagos = await obtenerPagos(ventaId, total);
+    return pagos
+        .where((p) => p.metodo == MetodoPago.efectivo)
+        .fold<int>(0, (suma, p) => suma + p.monto);
+  }
+
   /// Ventas con el nombre del usuario, más reciente primero.
   Stream<List<(Venta, String)>> watchVentas({
     EstadoVenta? estado,
@@ -147,6 +172,10 @@ class SalesLocalDatasource {
   /// inventario por ítem (`InventoryLocalDatasource.applyMovement`), entrada
   /// en `caja_movimientos` y auditoría.
   ///
+  /// [metodoPago]: se registra un pago por el total en `venta_pagos`; SOLO un
+  /// pago en efectivo genera el movimiento de `caja_movimientos` (tarjeta y
+  /// transferencia no entran a la caja física).
+  ///
   /// Con [permitirStockNegativo] en `false` lanza [StockInsuficienteException]
   /// (RN-12) si alguna línea deja el stock por debajo de cero.
   ///
@@ -163,6 +192,7 @@ class SalesLocalDatasource {
     required String cajaSesionId,
     required String usuarioId,
     required bool permitirStockNegativo,
+    MetodoPago metodoPago = MetodoPago.efectivo,
   }) {
     return _db.transaction(() async {
       final ventaId = generateUuidV4();
@@ -232,6 +262,28 @@ class SalesLocalDatasource {
         payload: ventaPayload(ventaFila),
       );
 
+      final pagoId = generateUuidV4();
+      await _db
+          .into(_db.ventaPagos)
+          .insert(
+            VentaPagosCompanion.insert(
+              id: Value(pagoId),
+              ventaId: ventaId,
+              metodo: metodoPago,
+              monto: total,
+            ),
+          );
+      final pagoFila = await (_db.select(
+        _db.ventaPagos,
+      )..where((t) => t.id.equals(pagoId))).getSingle();
+      await enqueueSync(
+        _db,
+        tabla: 'venta_pagos',
+        registroId: pagoId,
+        operacion: OperacionSync.insert,
+        payload: ventaPagoPayload(pagoFila),
+      );
+
       for (final item in items) {
         final itemId = generateUuidV4();
         await _db
@@ -297,29 +349,31 @@ class SalesLocalDatasource {
         payload: auditoriaPayload(auditFila),
       );
 
-      final cajaMovId = generateUuidV4();
-      await _db
-          .into(_db.cajaMovimientos)
-          .insert(
-            CajaMovimientosCompanion.insert(
-              id: Value(cajaMovId),
-              cajaSesionId: cajaSesionId,
-              tipo: TipoCajaMovimiento.venta,
-              monto: total,
-              referenciaId: Value(ventaId),
-              usuarioId: usuarioId,
-            ),
-          );
-      final cajaMovFila = await (_db.select(
-        _db.cajaMovimientos,
-      )..where((t) => t.id.equals(cajaMovId))).getSingle();
-      await enqueueSync(
-        _db,
-        tabla: 'caja_movimientos',
-        registroId: cajaMovId,
-        operacion: OperacionSync.insert,
-        payload: cajaMovimientoPayload(cajaMovFila),
-      );
+      if (metodoPago == MetodoPago.efectivo) {
+        final cajaMovId = generateUuidV4();
+        await _db
+            .into(_db.cajaMovimientos)
+            .insert(
+              CajaMovimientosCompanion.insert(
+                id: Value(cajaMovId),
+                cajaSesionId: cajaSesionId,
+                tipo: TipoCajaMovimiento.venta,
+                monto: total,
+                referenciaId: Value(ventaId),
+                usuarioId: usuarioId,
+              ),
+            );
+        final cajaMovFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(cajaMovId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: cajaMovId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(cajaMovFila),
+        );
+      }
 
       return ventaId;
     });
@@ -375,29 +429,33 @@ class SalesLocalDatasource {
         payload: ventaPayload(ventaFila),
       );
 
-      final cajaMovId = generateUuidV4();
-      await _db
-          .into(_db.cajaMovimientos)
-          .insert(
-            CajaMovimientosCompanion.insert(
-              id: Value(cajaMovId),
-              cajaSesionId: venta.cajaSesionId,
-              tipo: TipoCajaMovimiento.venta,
-              monto: -venta.total,
-              referenciaId: Value(id),
-              usuarioId: usuarioId,
-            ),
-          );
-      final cajaMovFila = await (_db.select(
-        _db.cajaMovimientos,
-      )..where((t) => t.id.equals(cajaMovId))).getSingle();
-      await enqueueSync(
-        _db,
-        tabla: 'caja_movimientos',
-        registroId: cajaMovId,
-        operacion: OperacionSync.insert,
-        payload: cajaMovimientoPayload(cajaMovFila),
-      );
+      // Solo lo cobrado en efectivo entró a la caja: solo eso se compensa.
+      final enEfectivo = await _montoEnEfectivo(id, venta.total);
+      if (enEfectivo > 0) {
+        final cajaMovId = generateUuidV4();
+        await _db
+            .into(_db.cajaMovimientos)
+            .insert(
+              CajaMovimientosCompanion.insert(
+                id: Value(cajaMovId),
+                cajaSesionId: venta.cajaSesionId,
+                tipo: TipoCajaMovimiento.venta,
+                monto: -enEfectivo,
+                referenciaId: Value(id),
+                usuarioId: usuarioId,
+              ),
+            );
+        final cajaMovFila = await (_db.select(
+          _db.cajaMovimientos,
+        )..where((t) => t.id.equals(cajaMovId))).getSingle();
+        await enqueueSync(
+          _db,
+          tabla: 'caja_movimientos',
+          registroId: cajaMovId,
+          operacion: OperacionSync.insert,
+          payload: cajaMovimientoPayload(cajaMovFila),
+        );
+      }
 
       final auditId = generateUuidV4();
       await _db

@@ -281,6 +281,37 @@ void main() {
     );
   });
 
+  testWidgets('teléfono · administrador · método de pago', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · método de pago',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.ir('/ventas/rapida', apilar: true);
+        await _agregarAlCarrito(sesion, [
+          'Huevos',
+          'Pan de agua',
+          'Jabón de cuaba',
+        ]);
+
+        // Cobro con tarjeta: sin monto recibido, chips ni cambio.
+        await sesion.tocarTexto('Cobrar');
+        await sesion.capturar('pos_cobro_efectivo');
+        await sesion.tocarTexto('Tarjeta');
+        await sesion.capturar('pos_cobro_tarjeta');
+        await sesion.tocarTexto('Confirmar pago');
+
+        // La venta queda registrada con tarjeta: se ve en su detalle.
+        await sesion.ir('/ventas');
+        await sesion.tocarTexto('RD\$ 37.00');
+        await sesion.capturar('venta_detalle_tarjeta');
+      },
+    );
+  });
+
   // Al final a propósito: un desmontaje abortado deja observers huérfanos que
   // no deben contaminar a otros escenarios.
   testWidgets('teléfono · administrador · pantallas apiladas', (tester) async {

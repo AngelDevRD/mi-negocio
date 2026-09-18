@@ -145,6 +145,7 @@ class CarritoVentaController extends Notifier<CarritoVentaState> {
   Future<Result<String>> registrar({
     required TipoVenta tipo,
     required String usuarioId,
+    MetodoPago metodoPago = MetodoPago.efectivo,
   }) {
     return ref
         .read(salesRepositoryProvider)
@@ -153,6 +154,7 @@ class CarritoVentaController extends Notifier<CarritoVentaState> {
           items: state.items,
           nota: state.nota,
           usuarioId: usuarioId,
+          metodoPago: metodoPago,
         );
   }
 }
