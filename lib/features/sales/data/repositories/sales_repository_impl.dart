@@ -107,22 +107,34 @@ class SalesRepositoryImpl implements SalesRepository {
       );
     }
 
-    final ventaId = await _local.registrarVenta(
-      tipo: tipo,
-      items: items
-          .map(
-            (item) => VentaItemEntrada(
-              productoId: item.productoId,
-              cantidad: item.cantidad,
-              precioUnitarioCents: item.precioUnitario.cents,
-            ),
-          )
-          .toList(),
-      nota: nota,
-      cajaSesionId: cajaSesionId,
-      usuarioId: usuarioId,
-    );
-    return Result.ok(ventaId);
+    try {
+      final ventaId = await _local.registrarVenta(
+        tipo: tipo,
+        items: items
+            .map(
+              (item) => VentaItemEntrada(
+                productoId: item.productoId,
+                cantidad: item.cantidad,
+                precioUnitarioCents: item.precioUnitario.cents,
+              ),
+            )
+            .toList(),
+        nota: nota,
+        cajaSesionId: cajaSesionId,
+        usuarioId: usuarioId,
+      );
+      return Result.ok(ventaId);
+    } on ProductoInexistenteException catch (e) {
+      // RN-05: el datasource revalidó dentro de la transacción y la
+      // revirtió por completo (defensa contra un producto eliminado entre
+      // la validación de arriba y la escritura).
+      final item = items.firstWhere((i) => i.productoId == e.productoId);
+      return Result.fail(
+        ValidationFailure(
+          'El producto "${item.productoNombre}" no existe o fue eliminado.',
+        ),
+      );
+    }
   }
 
   @override
@@ -137,7 +149,12 @@ class SalesRepositoryImpl implements SalesRepository {
     if (venta.estado == EstadoVenta.anulada) {
       return const Result.fail(ValidationFailure('La venta ya está anulada.'));
     }
-    await _local.anularVenta(id, usuarioId: usuarioId);
+    // RN-10: el datasource revalida el estado dentro de la transacción
+    // (defensa contra doble anulación por llamadas concurrentes).
+    final aplicado = await _local.anularVenta(id, usuarioId: usuarioId);
+    if (!aplicado) {
+      return const Result.fail(ValidationFailure('La venta ya está anulada.'));
+    }
     return const Result.ok(null);
   }
 
@@ -156,10 +173,17 @@ class SalesRepositoryImpl implements SalesRepository {
         ValidationFailure('Ya existe una sesión de caja abierta.'),
       );
     }
-    await _local.abrirCaja(
+    // RN-01: el datasource revalida dentro de la transacción (defensa
+    // contra doble apertura por llamadas concurrentes).
+    final abierta = await _local.abrirCaja(
       montoAperturaCents: montoApertura.cents,
       usuarioId: usuarioId,
     );
+    if (!abierta) {
+      return const Result.fail(
+        ValidationFailure('Ya existe una sesión de caja abierta.'),
+      );
+    }
     return const Result.ok(null);
   }
 }

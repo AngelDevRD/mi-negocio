@@ -9,10 +9,17 @@ import '../providers/sales_providers.dart';
 
 /// Detalle de una venta (RF-VEN): ítems, total, ganancia (solo admin) y
 /// anulación (RF-VEN/RN-10, solo Administrador).
-class SaleDetailScreen extends ConsumerWidget {
+class SaleDetailScreen extends ConsumerStatefulWidget {
   const SaleDetailScreen({super.key, required this.ventaId});
 
   final String ventaId;
+
+  @override
+  ConsumerState<SaleDetailScreen> createState() => _SaleDetailScreenState();
+}
+
+class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
+  bool _guardando = false;
 
   Future<void> _anular(
     BuildContext context,
@@ -42,12 +49,14 @@ class SaleDetailScreen extends ConsumerWidget {
     );
     if (confirmar != true) return;
 
+    setState(() => _guardando = true);
     final resultado = await ref
         .read(salesRepositoryProvider)
-        .anularVenta(ventaId, usuarioId: usuarioId);
-    if (!context.mounted) return;
+        .anularVenta(widget.ventaId, usuarioId: usuarioId);
+    if (!mounted) return;
+    setState(() => _guardando = false);
     resultado.when(
-      ok: (_) => ref.invalidate(ventaProvider(ventaId)),
+      ok: (_) => ref.invalidate(ventaProvider(widget.ventaId)),
       fail: (f) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(f.message),
@@ -58,8 +67,8 @@ class SaleDetailScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ventaAsync = ref.watch(ventaProvider(ventaId));
+  Widget build(BuildContext context) {
+    final ventaAsync = ref.watch(ventaProvider(widget.ventaId));
     final usuario = ref.watch(authControllerProvider).value;
     final esAdmin = switch (usuario) {
       SesionActiva(:final usuario) => usuario.esAdministrador,
@@ -181,11 +190,22 @@ class SaleDetailScreen extends ConsumerWidget {
               if (esAdmin && !anulada && usuarioId != null) ...[
                 const SizedBox(height: AppSpacing.lg),
                 OutlinedButton.icon(
-                  onPressed: () => _anular(context, ref, usuarioId),
-                  icon: Icon(
-                    Icons.block,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  onPressed: _guardando
+                      ? null
+                      : () => _anular(context, ref, usuarioId),
+                  icon: _guardando
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        )
+                      : Icon(
+                          Icons.block,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                   label: Text(
                     'Anular venta',
                     style: TextStyle(

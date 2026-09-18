@@ -20,6 +20,35 @@ void main() {
       expect(Money.parse('100').cents, 10000);
     });
 
+    test('tryParse devuelve el valor correcto con texto válido', () {
+      expect(Money.tryParse('1250.50')?.cents, 125050);
+      expect(Money.tryParse('1,250.50')?.cents, 125050);
+      expect(Money.tryParse('100')?.cents, 10000);
+    });
+
+    test('tryParse devuelve null con texto inválido (sin lanzar)', () {
+      expect(Money.tryParse('.'), isNull);
+      expect(Money.tryParse(','), isNull);
+      expect(Money.tryParse('1.2.3'), isNull);
+      expect(Money.tryParse(''), isNull);
+      expect(Money.tryParse('abc'), isNull);
+    });
+
+    test(
+      'tryParse devuelve null con valores no finitos que acepta '
+      'double.tryParse ("NaN", "Infinity", "-Infinity", desbordamientos)',
+      () {
+        expect(Money.tryParse('NaN'), isNull);
+        expect(Money.tryParse('Infinity'), isNull);
+        expect(Money.tryParse('-Infinity'), isNull);
+        expect(Money.tryParse('1e400'), isNull);
+      },
+    );
+
+    test('parse lanza FormatException (no UnsupportedError) con "NaN"', () {
+      expect(() => Money.parse('NaN'), throwsFormatException);
+    });
+
     test('fromPesos redondea al centavo', () {
       expect(Money.fromPesos(10.999).cents, 1100);
       expect(Money.fromPesos(0.005).cents, 1);

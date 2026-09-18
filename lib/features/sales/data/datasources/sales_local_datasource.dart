@@ -22,6 +22,16 @@ class VentaItemEntrada {
   final int precioUnitarioCents;
 }
 
+/// Lanzada dentro de la transacción de [SalesLocalDatasource.registrarVenta]
+/// cuando un ítem referencia un producto que ya no existe (RN-05): revierte
+/// la transacción completa. El repositorio la traduce a un `ValidationFailure`
+/// con el nombre del producto para el usuario.
+class ProductoInexistenteException implements Exception {
+  const ProductoInexistenteException(this.productoId);
+
+  final String productoId;
+}
+
 /// Acceso a `ventas`/`venta_items` (RF-VEN) y a la apertura mínima de
 /// `caja_sesiones` (RN-01).
 class SalesLocalDatasource {
@@ -30,9 +40,17 @@ class SalesLocalDatasource {
   final AppDatabase _db;
 
   /// Id de la sesión de caja abierta, si hay una (RN-01).
+  ///
+  /// Tolerante a más de una sesión abierta preexistente: no debería ocurrir,
+  /// pero un dato ya corrupto en una instalación publicada no debe tumbar la
+  /// app con una excepción cruda al intentar vender. Se toma la más reciente
+  /// por `fechaApertura` (`limit(1)` acota la fila para que `getSingleOrNull`
+  /// nunca lance `StateError`).
   Future<String?> obtenerCajaAbiertaId() async {
     final query = _db.select(_db.cajaSesiones)
-      ..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta));
+      ..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta))
+      ..orderBy([(t) => OrderingTerm.desc(t.fechaApertura)])
+      ..limit(1);
     final sesion = await query.getSingleOrNull();
     return sesion?.id;
   }
@@ -110,6 +128,13 @@ class SalesLocalDatasource {
   /// `venta_items` con el costo vigente capturado por ítem, salida de
   /// inventario por ítem (`InventoryLocalDatasource.applyMovement`), entrada
   /// en `caja_movimientos` y auditoría.
+  ///
+  /// Revalida dentro de la transacción que cada producto exista (RN-05): si
+  /// un ítem referencia un producto inexistente/eliminado, lanza
+  /// [ProductoInexistenteException] y la transacción entera se revierte, en
+  /// vez de registrar la venta con costo 0 y sin descontar stock. Cada
+  /// producto se consulta una sola vez por ítem (antes se consultaba dos
+  /// veces: una para el costo, otra para el descuento de stock).
   Future<String> registrarVenta({
     required TipoVenta tipo,
     required List<VentaItemEntrada> items,
@@ -123,11 +148,14 @@ class SalesLocalDatasource {
 
       var total = 0;
       var ganancia = 0;
-      final costos = <String, int>{};
+      final productos = <String, Producto>{};
       for (final item in items) {
         final producto = await inventory.obtenerProducto(item.productoId);
-        final costo = producto?.precioCompra ?? 0;
-        costos[item.productoId] = costo;
+        if (producto == null) {
+          throw ProductoInexistenteException(item.productoId);
+        }
+        productos[item.productoId] = producto;
+        final costo = producto.precioCompra;
         total += (item.precioUnitarioCents * item.cantidad).round();
         ganancia += ((item.precioUnitarioCents - costo) * item.cantidad)
             .round();
@@ -170,7 +198,7 @@ class SalesLocalDatasource {
                 productoId: item.productoId,
                 cantidad: item.cantidad,
                 precioUnitario: item.precioUnitarioCents,
-                costoUnitario: costos[item.productoId]!,
+                costoUnitario: productos[item.productoId]!.precioCompra,
               ),
             );
         final itemFila = await (_db.select(
@@ -184,11 +212,8 @@ class SalesLocalDatasource {
           payload: ventaItemPayload(itemFila),
         );
 
-        final producto = await inventory.obtenerProducto(item.productoId);
-        if (producto == null) continue;
-
         await inventory.applyMovement(
-          producto: producto,
+          producto: productos[item.productoId]!,
           tipo: TipoMovimientoInventario.venta,
           cantidad: -item.cantidad,
           referenciaId: ventaId,
@@ -258,11 +283,19 @@ class SalesLocalDatasource {
   /// Anula una venta completada (RN-10): revierte el stock de cada ítem,
   /// registra la salida compensatoria en `caja_movimientos`, marca la venta
   /// como anulada y registra auditoría.
-  Future<void> anularVenta(String id, {required String usuarioId}) {
+  ///
+  /// Revalida el estado de la venta como primera operación DENTRO de la
+  /// transacción (RN-10): dos llamadas concurrentes solo aplican la
+  /// reversión una vez. Devuelve `false` sin escribir nada si la venta no
+  /// existe o ya estaba anulada; `true` si la anulación se aplicó.
+  Future<bool> anularVenta(String id, {required String usuarioId}) {
     return _db.transaction(() async {
       final venta = await (_db.select(
         _db.ventas,
-      )..where((t) => t.id.equals(id))).getSingle();
+      )..where((t) => t.id.equals(id))).getSingleOrNull();
+      if (venta == null || venta.estado == EstadoVenta.anulada) {
+        return false;
+      }
       final items = await (_db.select(
         _db.ventaItems,
       )..where((t) => t.ventaId.equals(id))).get();
@@ -347,15 +380,32 @@ class SalesLocalDatasource {
         operacion: OperacionSync.insert,
         payload: auditoriaPayload(auditFila),
       );
+      return true;
     });
   }
 
   /// Abre una nueva sesión de caja (RN-01: requisito mínimo para vender).
-  Future<void> abrirCaja({
+  ///
+  /// Revalida que no exista una sesión abierta como primera operación
+  /// DENTRO de la transacción (RN-01): dos llamadas concurrentes solo
+  /// abren una sesión. Devuelve `false` sin escribir nada si ya había una
+  /// sesión abierta; `true` si la apertura se aplicó.
+  Future<bool> abrirCaja({
     required int montoAperturaCents,
     required String usuarioId,
   }) {
     return _db.transaction(() async {
+      // Tolerante a más de una sesión abierta preexistente (ver
+      // obtenerCajaAbiertaId): `limit(1)` acota la fila para que
+      // `getSingleOrNull` nunca lance `StateError` dentro de la transacción.
+      final existente = await (_db.select(_db.cajaSesiones)
+            ..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta))
+            ..orderBy([(t) => OrderingTerm.desc(t.fechaApertura)])
+            ..limit(1))
+          .getSingleOrNull();
+      if (existente != null) {
+        return false;
+      }
       final id = generateUuidV4();
       await _db
           .into(_db.cajaSesiones)
@@ -404,6 +454,7 @@ class SalesLocalDatasource {
         operacion: OperacionSync.insert,
         payload: auditoriaPayload(auditFila),
       );
+      return true;
     });
   }
 }

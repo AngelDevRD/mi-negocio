@@ -9,15 +9,39 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Datasource de prueba: fuerza el camino de traducción de
+/// [ProductoInexistenteException] en [SalesRepositoryImpl.registrarVenta]
+/// sin depender de una carrera real (existeProducto/obtenerCajaAbiertaId
+/// siguen siendo los reales, heredados, para que el resto del flujo del
+/// repositorio no cambie).
+class _DatasourceQueLanzaProductoInexistente extends SalesLocalDatasource {
+  _DatasourceQueLanzaProductoInexistente(super.db, this.productoId);
+
+  final String productoId;
+
+  @override
+  Future<String> registrarVenta({
+    required TipoVenta tipo,
+    required List<VentaItemEntrada> items,
+    String? nota,
+    required String cajaSesionId,
+    required String usuarioId,
+  }) {
+    throw ProductoInexistenteException(productoId);
+  }
+}
+
 void main() {
   late AppDatabase db;
+  late SalesLocalDatasource local;
   late SalesRepositoryImpl repo;
   late String usuarioId;
   late String productoId;
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    repo = SalesRepositoryImpl(SalesLocalDatasource(db));
+    local = SalesLocalDatasource(db);
+    repo = SalesRepositoryImpl(local);
 
     final negocioId = generateUuidV4();
     await db
@@ -102,6 +126,72 @@ void main() {
         fail: (f) => expect(f, isA<ValidationFailure>()),
       );
     });
+
+    test(
+      'RN-01: dos aperturas concurrentes solo crean una sesión abierta',
+      () async {
+        // Dos llamadas concurrentes sin await intercalado (TOCTOU real).
+        await Future.wait([
+          repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId),
+          repo.abrirCaja(montoApertura: const Money(0), usuarioId: usuarioId),
+        ]);
+
+        final abiertas = await (db.select(
+          db.cajaSesiones,
+        )..where((t) => t.estado.equalsValue(EstadoCajaSesion.abierta))).get();
+        expect(abiertas, hasLength(1));
+      },
+    );
+
+    test(
+      'tolera dos sesiones abiertas preexistentes sin lanzar excepción '
+      '(dato corrupto de una instalación previa al fix de RN-01)',
+      () async {
+        // Insertadas directamente en la base: simulan un estado ya corrupto
+        // (p.ej. por el bug de doble apertura de una versión anterior),
+        // sin pasar por abrirCaja().
+        final antigua = generateUuidV4();
+        await db
+            .into(db.cajaSesiones)
+            .insert(
+              CajaSesionesCompanion.insert(
+                id: Value(antigua),
+                fechaApertura: DateTime.utc(2026, 1, 1),
+                montoApertura: 0,
+                usuarioApertura: usuarioId,
+                estado: EstadoCajaSesion.abierta,
+              ),
+            );
+        final reciente = generateUuidV4();
+        await db
+            .into(db.cajaSesiones)
+            .insert(
+              CajaSesionesCompanion.insert(
+                id: Value(reciente),
+                fechaApertura: DateTime.utc(2026, 6, 1),
+                montoApertura: 0,
+                usuarioApertura: usuarioId,
+                estado: EstadoCajaSesion.abierta,
+              ),
+            );
+
+        final id = await local.obtenerCajaAbiertaId();
+        expect(id, reciente);
+
+        final result = await repo.abrirCaja(
+          montoApertura: const Money(0),
+          usuarioId: usuarioId,
+        );
+        expect(result.isOk, isFalse);
+        result.when(
+          ok: (_) => fail('no debería tener éxito'),
+          fail: (f) {
+            expect(f, isA<ValidationFailure>());
+            expect(f.message, 'Ya existe una sesión de caja abierta.');
+          },
+        );
+      },
+    );
   });
 
   group('registrarVenta', () {
@@ -258,6 +348,100 @@ void main() {
         );
       },
     );
+
+    test(
+      'RN-05: aborta toda la venta (sin rastro) si un producto ya no existe '
+      'al momento de escribir la transacción',
+      () async {
+        // Reproduce la condición de carrera real: el repositorio ya validó
+        // con existeProducto() (que SalesRepositoryImpl.registrarVenta hace
+        // antes de llamar al datasource), pero el producto se elimina antes
+        // de que la transacción lea su costo. Se llama al datasource
+        // directamente porque el pre-chequeo del repositorio, correcto para
+        // el caso normal, no puede detectar un borrado ocurrido después.
+        await repo.abrirCaja(
+          montoApertura: const Money(0),
+          usuarioId: usuarioId,
+        );
+        final cajaSesionId = (await local.obtenerCajaAbiertaId())!;
+
+        await expectLater(
+          local.registrarVenta(
+            tipo: TipoVenta.rapida,
+            items: [
+              VentaItemEntrada(
+                productoId: productoId,
+                cantidad: 2,
+                precioUnitarioCents: 15000,
+              ),
+              VentaItemEntrada(
+                productoId: generateUuidV4(), // eliminado justo antes.
+                cantidad: 1,
+                precioUnitarioCents: 5000,
+              ),
+            ],
+            cajaSesionId: cajaSesionId,
+            usuarioId: usuarioId,
+          ),
+          throwsA(isA<ProductoInexistenteException>()),
+        );
+
+        final ventas = await db.select(db.ventas).get();
+        expect(ventas, isEmpty);
+        final ventaItems = await db.select(db.ventaItems).get();
+        expect(ventaItems, isEmpty);
+        final movimientosCaja = await db.select(db.cajaMovimientos).get();
+        expect(movimientosCaja, isEmpty);
+        final movimientosInventario = await db
+            .select(db.movimientosInventario)
+            .get();
+        expect(movimientosInventario, isEmpty);
+
+        final producto = await (db.select(
+          db.productos,
+        )..where((t) => t.id.equals(productoId))).getSingle();
+        expect(producto.stockActual, 10);
+      },
+    );
+
+    test(
+      'RN-05: traduce ProductoInexistenteException a ValidationFailure con '
+      'el nombre del producto',
+      () async {
+        await repo.abrirCaja(
+          montoApertura: const Money(0),
+          usuarioId: usuarioId,
+        );
+        final repoConDatasourceQueLanza = SalesRepositoryImpl(
+          _DatasourceQueLanzaProductoInexistente(db, productoId),
+        );
+
+        final result = await repoConDatasourceQueLanza.registrarVenta(
+          tipo: TipoVenta.rapida,
+          items: [
+            ItemVentaInput(
+              productoId: productoId,
+              productoNombre: 'Salami',
+              cantidad: 1,
+              precioUnitario: const Money(150),
+            ),
+          ],
+          usuarioId: usuarioId,
+        );
+
+        expect(result.isOk, isFalse);
+        result.when(
+          ok: (_) => fail('no debería tener éxito'),
+          fail: (f) {
+            expect(f, isA<ValidationFailure>());
+            expect(
+              f.message,
+              'El producto "Salami" no existe o fue eliminado.',
+            );
+          },
+        );
+      },
+    );
   });
 
   group('anularVenta', () {
@@ -338,6 +522,53 @@ void main() {
         fail: (f) => expect(f, isA<ValidationFailure>()),
       );
     });
+
+    test(
+      'RN-10: dos anulaciones concurrentes solo revierten el stock una vez',
+      () async {
+        await repo.abrirCaja(
+          montoApertura: const Money(0),
+          usuarioId: usuarioId,
+        );
+        final registro = await repo.registrarVenta(
+          tipo: TipoVenta.rapida,
+          items: [
+            ItemVentaInput(
+              productoId: productoId,
+              productoNombre: 'Salami',
+              cantidad: 4,
+              precioUnitario: const Money(150),
+            ),
+          ],
+          usuarioId: usuarioId,
+        );
+        final ventaId = registro.valueOrNull!;
+
+        // Dos llamadas concurrentes sin await intercalado (TOCTOU real).
+        await Future.wait([
+          repo.anularVenta(ventaId, usuarioId: usuarioId),
+          repo.anularVenta(ventaId, usuarioId: usuarioId),
+        ]);
+
+        final producto = await (db.select(
+          db.productos,
+        )..where((t) => t.id.equals(productoId))).getSingle();
+        // Stock inicial 10 - 4 vendidas + 4 revertidas UNA sola vez = 10.
+        expect(producto.stockActual, 10);
+
+        final movimientosInventario = await (db.select(
+          db.movimientosInventario,
+        )..where((t) => t.tipo.equalsValue(TipoMovimientoInventario.anulacionVenta))).get();
+        expect(movimientosInventario, hasLength(1));
+
+        final movimientosCaja = await db.select(db.cajaMovimientos).get();
+        final movimientosCajaAnulacion = movimientosCaja
+            .where((m) => m.referenciaId == ventaId && m.monto < 0)
+            .toList();
+        expect(movimientosCajaAnulacion, hasLength(1));
+        expect(movimientosCajaAnulacion.single.monto, -600);
+      },
+    );
   });
 
   group('watchVentas / obtenerVenta', () {

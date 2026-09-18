@@ -8,10 +8,28 @@ class Money implements Comparable<Money> {
   const Money(this.cents);
 
   /// Crea desde un valor decimal escrito por el usuario (ej. "1250.50").
-  /// Redondea al centavo más cercano.
+  /// Redondea al centavo más cercano. Lanza [FormatException] si la entrada
+  /// no es un decimal válido; para validar sin excepción usa [tryParse].
   factory Money.parse(String input) {
+    final money = tryParse(input);
+    if (money == null) {
+      throw FormatException('Monto inválido: "$input"');
+    }
+    return money;
+  }
+
+  /// Igual que [Money.parse] pero devuelve `null` en vez de lanzar cuando la
+  /// entrada no es un decimal válido (p.ej. ".", ",", "1.2.3" o vacía tras
+  /// normalizar). Pensado para validar entradas de formularios sin depender
+  /// de excepciones.
+  static Money? tryParse(String input) {
     final normalized = input.replaceAll(',', '').trim();
-    final value = double.parse(normalized);
+    final value = double.tryParse(normalized);
+    // double.tryParse acepta "NaN", "Infinity", "-Infinity" y desbordamientos
+    // como "1e400" (que da Infinity): ninguno es un monto válido, y
+    // (value * 100).round() lanza UnsupportedError con ellos en vez de
+    // tratarse como entrada inválida.
+    if (value == null || !value.isFinite) return null;
     return Money((value * 100).round());
   }
 

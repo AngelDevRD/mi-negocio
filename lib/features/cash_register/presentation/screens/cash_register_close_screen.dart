@@ -81,6 +81,10 @@ class _CashRegisterCloseScreenState
             return const Center(child: Text('No hay una caja abierta.'));
           }
           final montoEsperado = sesion.montoActual;
+          // tryParse en vez de parse: mientras el cajero teclea, el texto
+          // puede ser momentáneamente inválido (".", "1.2.3"...) y el build
+          // no debe lanzar por eso; el validator ya muestra el error.
+          final montoContado = Money.tryParse(_montoContadoController.text);
 
           return Form(
             key: _formKey,
@@ -127,7 +131,10 @@ class _CashRegisterCloseScreenState
                   ],
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                    if (Money.parse(v).isNegative) return 'Monto inválido';
+                    final monto = Money.tryParse(v);
+                    if (monto == null || monto.isNegative) {
+                      return 'Monto inválido';
+                    }
                     return null;
                   },
                   onChanged: (_) => setState(() {}),
@@ -147,10 +154,11 @@ class _CashRegisterCloseScreenState
                   ],
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                    final monto = Money.parse(v);
-                    if (monto.isNegative) return 'Monto inválido';
-                    if (_montoContadoController.text.trim().isNotEmpty &&
-                        monto > Money.parse(_montoContadoController.text)) {
+                    final monto = Money.tryParse(v);
+                    if (monto == null || monto.isNegative) {
+                      return 'Monto inválido';
+                    }
+                    if (montoContado != null && monto > montoContado) {
                       return 'No puede ser mayor que el monto contado';
                     }
                     return null;
@@ -158,10 +166,10 @@ class _CashRegisterCloseScreenState
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                if (_montoContadoController.text.trim().isNotEmpty)
+                if (montoContado != null)
                   _ResumenCierre(
                     montoEsperado: montoEsperado,
-                    montoContado: Money.parse(_montoContadoController.text),
+                    montoContado: montoContado,
                   ),
                 if (_error != null) ...[
                   const SizedBox(height: AppSpacing.sm),
