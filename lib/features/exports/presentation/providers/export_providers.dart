@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/app_database.dart';
@@ -38,28 +37,6 @@ class FormatoExportController extends Notifier<FormatoExport> {
   FormatoExport build() => FormatoExport.excel;
 
   void seleccionar(FormatoExport formato) => state = formato;
-}
-
-/// Rango de fechas para ventas, compras y empleados/pagos (RF-EXP-02).
-/// Por defecto, el mes en curso.
-final rangoExportProvider =
-    NotifierProvider<RangoExportController, DateTimeRange>(
-      RangoExportController.new,
-    );
-
-class RangoExportController extends Notifier<DateTimeRange> {
-  @override
-  DateTimeRange build() {
-    final ahora = DateTime.now();
-    final inicioMes = DateTime(ahora.year, ahora.month, 1);
-    final inicioMesSiguiente = DateTime(ahora.year, ahora.month + 1, 1);
-    return DateTimeRange(
-      start: inicioMes,
-      end: inicioMesSiguiente.subtract(const Duration(seconds: 1)),
-    );
-  }
-
-  void seleccionar(DateTimeRange rango) => state = rango;
 }
 
 /// Mes seleccionado para el resumen mensual (RF-EXP-02).

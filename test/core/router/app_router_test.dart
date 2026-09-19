@@ -166,6 +166,18 @@ void main() {
   group('cajero', () {
     final sesion = SesionActiva(_usuario(RolUsuario.cajero));
 
+    // El Cajero SÍ puede abrir el formulario de producto (crear y editar):
+    // por eso el formulario le oculta el costo (ver product_form_screen_test).
+    for (final ruta in [
+      AppRoutes.productosNuevo,
+      '/productos/abc',
+      '/productos/abc/editar',
+    ]) {
+      testWidgets('$ruta es accesible para el cajero', (tester) async {
+        expect(await _resolver(tester, ruta, sesion: sesion), ruta);
+      });
+    }
+
     for (final ruta in [
       '/empleados',
       '/analisis',
@@ -185,6 +197,41 @@ void main() {
         expect(await _resolver(tester, ruta, sesion: sesion), ruta);
       });
     }
+  });
+
+  group('Datos (exportar + importar + respaldo fusionados)', () {
+    final admin = SesionActiva(_usuario(RolUsuario.administrador));
+    final cajero = SesionActiva(_usuario(RolUsuario.cajero));
+    final antiguas = [
+      AppRoutes.exportaciones,
+      AppRoutes.importar,
+      AppRoutes.respaldo,
+    ];
+
+    testWidgets('/datos es accesible para el administrador', (tester) async {
+      expect(await _resolver(tester, AppRoutes.datos, sesion: admin), '/datos');
+    });
+
+    for (final ruta in antiguas) {
+      testWidgets('$ruta termina en /datos (administrador)', (tester) async {
+        expect(await _resolver(tester, ruta, sesion: admin), AppRoutes.datos);
+      });
+      testWidgets('$ruta termina en / para el cajero (no llega a Datos)', (
+        tester,
+      ) async {
+        expect(await _resolver(tester, ruta, sesion: cajero), '/');
+      });
+      testWidgets('$ruta termina en /login sin sesión', (tester) async {
+        expect(
+          await _resolver(tester, ruta, sesion: const SinSesion()),
+          '/login',
+        );
+      });
+    }
+
+    testWidgets('/datos termina en / para el cajero', (tester) async {
+      expect(await _resolver(tester, AppRoutes.datos, sesion: cajero), '/');
+    });
   });
 
   group('administrador', () {

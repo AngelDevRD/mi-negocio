@@ -1,81 +1,38 @@
+import 'dart:developer' as developer;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../../../license/domain/entities/licencia.dart';
-import '../../../license/presentation/providers/license_providers.dart';
+import '../../../data/presentation/widgets/seccion_datos.dart';
 import '../../domain/entities/import_target.dart';
 import '../providers/import_providers.dart';
 
-/// Pantalla de importación de datos de migración (FASE 20, solo
-/// Administrador). No disponible en el plan Demo (RN-17, igual que
-/// exportaciones).
-class ImportScreen extends ConsumerWidget {
-  const ImportScreen({super.key});
+/// Sección "Importar" de Datos (FASE 20): elegir el tipo de datos, ver qué
+/// columnas reconoce la app, cargar el Excel, emparejar columnas, revisar la
+/// vista previa y confirmar. Al terminar lista los errores fila por fila.
+class SeccionImportar extends ConsumerStatefulWidget {
+  const SeccionImportar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final licencia = ref.watch(licenseControllerProvider).value;
-    final esDemo = switch (licencia) {
-      LicenciaActiva(:final licencia) => licencia.tipo == TipoLicencia.demo,
-      _ => false,
-    };
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Importar datos')),
-      body: esDemo ? const _BloqueoDemo() : const _ImportForm(),
-    );
-  }
+  ConsumerState<SeccionImportar> createState() => _SeccionImportarState();
 }
 
-class _BloqueoDemo extends StatelessWidget {
-  const _BloqueoDemo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 48),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'La importación de datos no está disponible en el plan Demo.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'Activa una licencia Local o Nube para migrar datos desde Excel.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ImportForm extends ConsumerStatefulWidget {
-  const _ImportForm();
-
-  @override
-  ConsumerState<_ImportForm> createState() => _ImportFormState();
-}
-
-class _ImportFormState extends ConsumerState<_ImportForm> {
+class _SeccionImportarState extends ConsumerState<SeccionImportar> {
   bool _leyendo = false;
+  bool _importando = false;
   String? _errorArchivo;
   String? _nombreArchivo;
 
   static final DateFormat _fecha = DateFormat('dd/MM/yyyy');
+
+  /// Errores por fila que se listan (el resto se resume).
+  static const _maximoErrores = 20;
 
   String? _usuarioId() {
     final sesion = ref.read(authControllerProvider).value;
@@ -86,6 +43,7 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
   }
 
   Future<void> _elegirArchivo() async {
+    if (_leyendo) return;
     setState(() {
       _leyendo = true;
       _errorArchivo = null;
@@ -99,47 +57,134 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
       final archivo = resultado?.files.single;
       final bytes = archivo?.bytes;
       if (archivo == null || bytes == null) {
-        setState(() => _leyendo = false);
+        if (mounted) setState(() => _leyendo = false);
         return;
       }
       final error = ref
           .read(importControllerProvider.notifier)
           .cargarArchivo(bytes);
+      if (!mounted) return;
       setState(() {
         _leyendo = false;
         _errorArchivo = error;
         _nombreArchivo = error == null ? archivo.name : null;
       });
-    } catch (e) {
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo leer el Excel',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return;
       setState(() {
         _leyendo = false;
-        _errorArchivo = 'No se pudo leer el archivo: $e';
+        _errorArchivo =
+            'No se pudo leer el archivo. Comprueba que sea un Excel '
+            '(.xlsx o .xls) válido.';
         _nombreArchivo = null;
       });
     }
   }
 
   Future<void> _confirmar() async {
+    if (_importando) return;
     final usuarioId = _usuarioId();
-    if (usuarioId == null) return;
-    await ref
+    final estado = ref.read(importControllerProvider);
+    final hoja = estado.hoja;
+    if (usuarioId == null || hoja == null || estado.cargandoImportacion) {
+      return;
+    }
+
+    final filas = hoja.filas.length;
+    final confirmado = await mostrarConfirmacion(
+      context,
+      titulo: '¿Importar $filas ${filas == 1 ? 'fila' : 'filas'}?',
+      mensaje:
+          'Se agregarán como ${estado.targetType.etiqueta.toLowerCase()} a '
+          'los datos actuales (no reemplaza nada). Las filas con errores se '
+          'omiten y se listan al terminar.',
+      confirmarLabel: 'Importar',
+    );
+    if (!confirmado || !mounted || _importando) return;
+
+    setState(() => _importando = true);
+    final error = await ref
         .read(importControllerProvider.notifier)
         .confirmarImportacion(usuarioId: usuarioId);
+    if (!mounted) return;
+    setState(() => _importando = false);
+    final resultado = ref.read(importControllerProvider).resultado;
+    if (error != null) {
+      AppSnackbar.error(context, error);
+    } else if (resultado != null) {
+      AppSnackbar.exito(
+        context,
+        '${resultado.insertados} '
+        '${resultado.insertados == 1 ? 'fila importada' : 'filas importadas'}'
+        '${resultado.errores.isEmpty ? '.' : ' (${resultado.errores.length} con errores).'}',
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final estado = ref.watch(importControllerProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final campos = camposImportacion[estado.targetType]!;
+    final ocupado = _importando || estado.cargandoImportacion;
 
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+    return SeccionDatos(
+      icono: Icons.file_upload_outlined,
+      titulo: 'Importar',
+      descripcion:
+          'Trae tus datos desde el Excel de tu sistema anterior. Revisa la '
+          'vista previa antes de importar.',
       children: [
-        Text(
-          'Sube el Excel de tu sistema anterior. La IA te ayuda a mapear las '
-          'columnas al formato de la app; revisa y corrige antes de importar.',
-          style: Theme.of(context).textTheme.bodyMedium,
+        Text('1. Qué vas a importar', style: textTheme.labelLarge),
+        const SizedBox(height: AppSpacing.xs),
+        DropdownButtonFormField<ImportTargetType>(
+          initialValue: estado.targetType,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Tipo de datos'),
+          items: [
+            for (final tipo in ImportTargetType.values)
+              DropdownMenuItem(value: tipo, child: Text(tipo.etiqueta)),
+          ],
+          onChanged: ocupado
+              ? null
+              : (valor) {
+                  if (valor == null) return;
+                  ref
+                      .read(importControllerProvider.notifier)
+                      .seleccionarTipo(valor);
+                },
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.sm),
+        // "Plantilla": las columnas que la app reconoce para este tipo.
+        Text(
+          'Columnas que reconoce la app (* obligatoria). Tu Excel debe '
+          'tener una fila de encabezados; en el paso 3 las emparejas.',
+          style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            for (final campo in campos)
+              Chip(
+                visualDensity: VisualDensity.compact,
+                label: Text(
+                  campo.requerido ? '${campo.etiqueta} *' : campo.etiqueta,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text('2. Tu archivo', style: textTheme.labelLarge),
+        const SizedBox(height: AppSpacing.xs),
         OutlinedButton.icon(
           icon: _leyendo
               ? const SizedBox(
@@ -148,24 +193,28 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.upload_file_outlined),
-          label: Text(_nombreArchivo ?? 'Elegir archivo Excel'),
-          onPressed: _leyendo ? null : _elegirArchivo,
+          label: Text(
+            _leyendo
+                ? 'Leyendo el archivo...'
+                : (_nombreArchivo ?? 'Elegir archivo Excel'),
+          ),
+          onPressed: (_leyendo || ocupado) ? null : _elegirArchivo,
         ),
         if (_errorArchivo != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          Text(
-            _errorArchivo!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          _Mensaje(
+            icono: Icons.error_outline,
+            texto: _errorArchivo!,
+            color: scheme.error,
           ),
         ],
         if (estado.hojas.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
           if (estado.hojas.length > 1) ...[
-            Text('Hoja', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
             DropdownButtonFormField<int>(
               initialValue: estado.hojaSeleccionada,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Hoja del Excel'),
               items: [
                 for (var i = 0; i < estado.hojas.length; i++)
                   DropdownMenuItem(
@@ -173,41 +222,23 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
                     child: Text(estado.hojas[i].nombre),
                   ),
               ],
-              onChanged: (valor) {
-                if (valor == null) return;
-                ref
-                    .read(importControllerProvider.notifier)
-                    .seleccionarHoja(valor);
-              },
+              onChanged: ocupado
+                  ? null
+                  : (valor) {
+                      if (valor == null) return;
+                      ref
+                          .read(importControllerProvider.notifier)
+                          .seleccionarHoja(valor);
+                    },
             ),
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.md),
           ],
-          Text(
-            'Tipo de datos a importar',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          DropdownButtonFormField<ImportTargetType>(
-            initialValue: estado.targetType,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: [
-              for (final tipo in ImportTargetType.values)
-                DropdownMenuItem(value: tipo, child: Text(tipo.etiqueta)),
-            ],
-            onChanged: (valor) {
-              if (valor == null) return;
-              ref
-                  .read(importControllerProvider.notifier)
-                  .seleccionarTipo(valor);
-            },
-          ),
-          const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  'Mapeo de columnas',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  '3. Empareja las columnas',
+                  style: textTheme.labelLarge,
                 ),
               ),
               TextButton.icon(
@@ -219,7 +250,7 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
                       )
                     : const Icon(Icons.auto_awesome_outlined),
                 label: const Text('Sugerir con IA'),
-                onPressed: estado.cargandoIA
+                onPressed: (estado.cargandoIA || ocupado)
                     ? null
                     : () => ref
                           .read(importControllerProvider.notifier)
@@ -229,56 +260,144 @@ class _ImportFormState extends ConsumerState<_ImportForm> {
           ),
           if (estado.advertenciasIA != null &&
               estado.advertenciasIA!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            ...estado.advertenciasIA!.map(
-              (a) => Text(
-                '⚠ $a',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+            const SizedBox(height: AppSpacing.xs),
+            for (final a in estado.advertenciasIA!)
+              _Mensaje(
+                icono: Icons.warning_amber_rounded,
+                texto: a,
+                color: context.appColors.advertencia,
               ),
-            ),
           ],
           const SizedBox(height: AppSpacing.sm),
           const _MapeoTabla(),
-          const SizedBox(height: AppSpacing.lg),
-          Text('Vista previa', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.md),
+          Text('4. Vista previa', style: textTheme.labelLarge),
+          const SizedBox(height: AppSpacing.xs),
           _VistaPrevia(formatoFecha: _fecha),
           if (estado.error != null) ...[
             const SizedBox(height: AppSpacing.sm),
-            Text(
-              estado.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            _Mensaje(
+              icono: Icons.error_outline,
+              texto: estado.error!,
+              color: scheme.error,
             ),
           ],
           if (estado.resultado != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              '${estado.resultado!.insertados} fila(s) importada(s).',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            ...estado.resultado!.errores.map(
-              (e) => Text(
-                e,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            const SizedBox(height: AppSpacing.md),
+            _ResultadoImportacion(
+              insertados: estado.resultado!.insertados,
+              errores: estado.resultado!.errores,
+              maximoErrores: _maximoErrores,
             ),
           ],
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
           FilledButton.icon(
-            icon: estado.cargandoImportacion
+            icon: ocupado
                 ? const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_alt_outlined),
-            label: Text(
-              estado.cargandoImportacion ? 'Importando...' : 'Importar',
-            ),
-            onPressed: estado.cargandoImportacion ? null : _confirmar,
+            label: Text(ocupado ? 'Importando...' : 'Importar'),
+            onPressed: ocupado ? null : _confirmar,
           ),
+          if (ocupado) ...[
+            const SizedBox(height: AppSpacing.sm),
+            const LinearProgressIndicator(),
+          ],
         ],
       ],
+    );
+  }
+}
+
+/// Línea de mensaje con ícono + texto (no solo color).
+class _Mensaje extends StatelessWidget {
+  const _Mensaje({
+    required this.icono,
+    required this.texto,
+    required this.color,
+  });
+
+  final IconData icono;
+  final String texto;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icono, size: 18, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(texto, style: TextStyle(color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Resultado de una importación: cuántas filas entraron y, una por una, las
+/// que no (con el número de fila del Excel y el motivo).
+class _ResultadoImportacion extends StatelessWidget {
+  const _ResultadoImportacion({
+    required this.insertados,
+    required this.errores,
+    required this.maximoErrores,
+  });
+
+  final int insertados;
+  final List<String> errores;
+  final int maximoErrores;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            EtiquetaEstado(
+              icono: Icons.check_circle_outline,
+              texto:
+                  '$insertados ${insertados == 1 ? 'fila importada' : 'filas importadas'}',
+              color: context.appColors.exito,
+            ),
+            if (errores.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              EtiquetaEstado(
+                icono: Icons.error_outline,
+                texto:
+                    '${errores.length} ${errores.length == 1 ? 'fila no se importó' : 'filas no se importaron'}',
+                color: scheme.error,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              for (final error in errores.take(maximoErrores))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                  child: Text('• $error', style: textTheme.bodySmall),
+                ),
+              if (errores.length > maximoErrores)
+                Text(
+                  'y ${errores.length - maximoErrores} más.',
+                  style: textTheme.bodySmall,
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

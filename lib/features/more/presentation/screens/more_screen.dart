@@ -81,25 +81,11 @@ const _secciones = [
       'Haz preguntas sobre tu negocio en lenguaje natural.',
       AppRoutes.asistente,
     ),
-  ]),
-  _Seccion('Datos', soloAdmin: true, [
     _Modulo(
-      Icons.ios_share_outlined,
-      'Exportaciones',
-      'Genera reportes en Excel, PDF o CSV.',
-      AppRoutes.exportaciones,
-    ),
-    _Modulo(
-      Icons.file_upload_outlined,
-      'Importar datos',
-      'Migra tus productos, ventas y más desde un Excel.',
-      AppRoutes.importar,
-    ),
-    _Modulo(
-      Icons.backup_outlined,
-      'Respaldo',
-      'Copia de seguridad y restauración de tus datos.',
-      AppRoutes.respaldo,
+      Icons.storage_outlined,
+      'Datos',
+      'Respaldo y restauración, exportar reportes e importar desde Excel.',
+      AppRoutes.datos,
     ),
   ]),
 ];

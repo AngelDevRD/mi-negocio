@@ -1,5 +1,8 @@
 import '../entities/registro_auditoria.dart';
 
+/// Cuántos registros se piden por página en la pantalla de auditoría.
+const int limitePorDefectoAuditoria = 100;
+
 /// Filtros de la pantalla de auditoría (RF-AUD-02): por módulo, acción,
 /// usuario y rango de fechas. Todos los campos son opcionales.
 class AuditoriaFiltro {
@@ -44,8 +47,12 @@ typedef UsuarioFiltro = ({String id, String nombre});
 /// Acceso de solo lectura a la tabla `auditoria` (RF-AUD-02). Es
 /// append-only: no existen operaciones de edición o borrado.
 abstract interface class AuditRepository {
-  /// Registros que cumplen [filtro], más reciente primero.
-  Stream<List<RegistroAuditoria>> watchRegistros(AuditoriaFiltro filtro);
+  /// Registros que cumplen [filtro], más reciente primero, hasta [limite]
+  /// (la auditoría no se carga completa; la pantalla pide más de a poco).
+  Stream<List<RegistroAuditoria>> watchRegistros(
+    AuditoriaFiltro filtro, {
+    int limite = limitePorDefectoAuditoria,
+  });
 
   /// Módulos distintos presentes en la auditoría, para el filtro.
   Future<List<String>> listarModulos();

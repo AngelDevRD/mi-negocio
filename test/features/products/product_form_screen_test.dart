@@ -197,12 +197,99 @@ void main() {
         rol: RolUsuario.cajero,
       );
 
-      await tester.enterText(_campo('Precio de compra'), '100');
       await tester.enterText(_campo('Precio de venta'), '150');
       await tester.pump();
 
       expect(find.text('Margen'), findsNothing);
-      expect(find.text('RD\$ 50.00'), findsNothing);
+      expect(find.textContaining('ver el margen'), findsNothing);
+    });
+  });
+
+  // Deuda de TASK-026: un Cajero SÍ puede abrir este formulario (ver el test
+  // de rutas en app_router_test.dart), así que el costo no puede verse.
+  group('costo oculto al Cajero', () {
+    testWidgets('el Administrador ve el campo "Precio de compra"', (
+      tester,
+    ) async {
+      await _montarEncima(tester, _RepoFormularioFalso([]), '/nuevo');
+
+      expect(_campo('Precio de compra'), findsOneWidget);
+      expect(find.textContaining('lo completa el administrador'), findsNothing);
+    });
+
+    testWidgets('el Cajero NO ve "Precio de compra" al crear y lo avisa', (
+      tester,
+    ) async {
+      await _montarEncima(
+        tester,
+        _RepoFormularioFalso([]),
+        '/nuevo',
+        rol: RolUsuario.cajero,
+      );
+
+      expect(_campo('Precio de compra'), findsNothing);
+      expect(_campo('Precio de venta'), findsOneWidget);
+      expect(
+        find.text('El costo del producto lo completa el administrador.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Cajero CREA: el costo se guarda en 0 (sin pedirlo)', (
+      tester,
+    ) async {
+      final repo = _RepoFormularioFalso([]);
+      await _montarEncima(tester, repo, '/nuevo', rol: RolUsuario.cajero);
+
+      await tester.enterText(_campo('Nombre'), 'Yuca');
+      await tester.enterText(_campo('Precio de venta'), '35');
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(repo.creados, 1);
+      expect(repo.ultimoPrecioCompra, Money.zero);
+      expect(repo.ultimoPrecioVenta, const Money(3500));
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('Cajero EDITA: no ve el costo y se CONSERVA el existente', (
+      tester,
+    ) async {
+      final repo = _RepoFormularioFalso([
+        producto('Salami', id: 'p1', compra: 12345, venta: 20000),
+      ]);
+      await _montarEncima(tester, repo, '/editar/p1', rol: RolUsuario.cajero);
+
+      expect(_campo('Precio de compra'), findsNothing);
+      expect(find.textContaining('lo completa el administrador'), findsNothing);
+      expect(find.textContaining('12,345'), findsNothing);
+      expect(find.textContaining('123.45'), findsNothing);
+
+      await tester.enterText(_campo('Precio de venta'), '250');
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(repo.actualizados, 1);
+      expect(repo.ultimoPrecioCompra, const Money(12345));
+      expect(repo.ultimoPrecioVenta, const Money(25000));
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('Administrador EDITA: ve el costo y puede cambiarlo', (
+      tester,
+    ) async {
+      final repo = _RepoFormularioFalso([
+        producto('Salami', id: 'p1', compra: 12345, venta: 20000),
+      ]);
+      await _montarEncima(tester, repo, '/editar/p1');
+
+      expect(_texto(tester, 'Precio de compra'), '123.45');
+      await tester.enterText(_campo('Precio de compra'), '130');
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(repo.ultimoPrecioCompra, const Money(13000));
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 

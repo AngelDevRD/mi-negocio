@@ -102,6 +102,24 @@ void main() {
   });
 
   group('watchRegistros', () {
+    test('el límite trae solo los N MÁS RECIENTES (no carga todo)', () async {
+      final dos = await repo
+          .watchRegistros(const AuditoriaFiltro(), limite: 2)
+          .first;
+
+      expect(dos, hasLength(2));
+      expect(dos.map((r) => r.fecha), [
+        DateTime.utc(2026, 1, 20),
+        DateTime.utc(2026, 1, 15),
+      ]);
+
+      // El límite se aplica DESPUÉS del filtro.
+      final unaDeProductos = await repo
+          .watchRegistros(const AuditoriaFiltro(modulo: 'productos'), limite: 1)
+          .first;
+      expect(unaDeProductos.single.accion, 'editar');
+    });
+
     test('sin filtro devuelve todos, más reciente primero', () async {
       final registros = await repo
           .watchRegistros(const AuditoriaFiltro())

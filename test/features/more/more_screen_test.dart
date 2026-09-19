@@ -78,9 +78,6 @@ void main() {
         'Auditoría',
         'Asistente IA',
         'Datos',
-        'Exportaciones',
-        'Importar datos',
-        'Respaldo',
         'Perfil y suscripción',
         'Ajustes del negocio',
       ]) {
@@ -107,9 +104,6 @@ void main() {
         'Auditoría',
         'Asistente IA',
         'Datos',
-        'Exportaciones',
-        'Importar datos',
-        'Respaldo',
         'Cuenta',
         'Perfil y suscripción',
         'Ajustes del negocio',
@@ -119,6 +113,16 @@ void main() {
       }
       expect(find.text('Ana Admin'), findsOneWidget);
       expect(find.text('Administrador'), findsOneWidget);
+    });
+
+    testWidgets('Datos es UNA sola entrada: Exportaciones, Importar datos y '
+        'Respaldo ya no aparecen sueltos', (tester) async {
+      await _montar(tester, RolUsuario.administrador);
+
+      expect(find.text('Datos'), findsOneWidget);
+      for (final texto in ['Exportaciones', 'Importar datos', 'Respaldo']) {
+        expect(find.text(texto), findsNothing, reason: texto);
+      }
     });
   });
 

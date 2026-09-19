@@ -19,14 +19,19 @@
 // `sesion.ir('/ruta')` y llama a `sesion.capturar('nombre')`.
 
 import 'package:app_gestion/core/database/enums.dart';
+import 'package:app_gestion/features/backup/presentation/providers/backup_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
+import 'helpers/respaldo_visual.dart';
 import 'helpers/visual_harness.dart';
 
 void main() {
   setUpAll(() async {
     prepararInforme();
     await cargarFuentesReales();
+    // Igual que main.dart: sin esto los formatos de fecha en español fallan.
+    await initializeDateFormatting('es');
   });
 
   testWidgets('teléfono · administrador', (tester) async {
@@ -528,6 +533,84 @@ void main() {
         await sesion.capturar('admin_ajuste_stock_salida');
         await sesion.escribir('Cantidad', '500');
         await sesion.capturar('admin_ajuste_stock_negativo');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · datos, análisis y auditoría', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · datos, análisis y auditoría',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      overrides: [
+        backupFileServiceProvider.overrideWithValue(RespaldoVisual()),
+      ],
+      cuerpo: (sesion) async {
+        // Más: una sola entrada "Datos".
+        await sesion.ir('/mas');
+        await sesion.mostrarTexto('Datos');
+        await sesion.capturar('admin_mas_datos');
+
+        // Datos: respaldo, exportar e importar en una pantalla.
+        await sesion.ir('/datos', apilar: true);
+        await sesion.capturar('admin_datos');
+
+        // Restaurar: confirmación destructiva.
+        await sesion.tocarTexto('Restaurar desde archivo');
+        await sesion.capturar('admin_datos_restaurar_confirmar');
+        await sesion.tocarTexto('Cancelar');
+
+        await sesion.mostrarTexto('Generar y compartir');
+        await sesion.capturar('admin_datos_exportar');
+        await sesion.mostrarTexto('Elegir archivo Excel');
+        await sesion.capturar('admin_datos_importar');
+        await sesion.atras();
+
+        // Análisis: resumen, gráficas con leyenda y detalle por mes.
+        await sesion.ir('/analisis', apilar: true);
+        await sesion.capturar('admin_analisis');
+        await sesion.mostrarTexto('Ganancia mensual');
+        await sesion.capturar('admin_analisis_graficas');
+        await sesion.mostrarTexto('Detalle por mes');
+        await sesion.capturar('admin_analisis_detalle');
+        await sesion.mostrarTexto('Más rentable');
+        await sesion.capturar('admin_analisis_rankings');
+        await sesion.atras();
+
+        // Auditoría: lista con acción icono+texto y filtro por módulo.
+        await sesion.ir('/auditoria', apilar: true);
+        await sesion.capturar('admin_auditoria');
+        await sesion.elegirEnLista('modulo-null', 'Ventas');
+        await sesion.capturar('admin_auditoria_filtrada');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · análisis y datos · texto 1.3', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · análisis y datos · texto 1.3',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      textScale: 1.3,
+      cuerpo: (sesion) async {
+        await sesion.ir('/analisis', apilar: true);
+        await sesion.capturar('analisis_texto_grande');
+        await sesion.mostrarTexto('Detalle por mes');
+        await sesion.capturar('analisis_texto_grande_detalle');
+        await sesion.atras();
+
+        await sesion.ir('/datos', apilar: true);
+        await sesion.capturar('datos_texto_grande');
       },
     );
   });

@@ -12,14 +12,19 @@ class AuditLocalDatasource {
   final AppDatabase _db;
 
   /// Registros que cumplen [filtro], unidos con `usuarios` para mostrar el
-  /// nombre, más reciente primero.
-  Stream<List<(AuditoriaData, String)>> watchRegistros(AuditoriaFiltro filtro) {
+  /// nombre, más reciente primero. Devuelve como máximo [limite] registros:
+  /// la auditoría crece sin parar y nunca se carga completa.
+  Stream<List<(AuditoriaData, String)>> watchRegistros(
+    AuditoriaFiltro filtro, {
+    required int limite,
+  }) {
     final query = _db.select(_db.auditoria).join([
       innerJoin(
         _db.usuarios,
         _db.usuarios.id.equalsExp(_db.auditoria.usuarioId),
       ),
     ])..orderBy([OrderingTerm.desc(_db.auditoria.fecha)]);
+    query.limit(limite);
 
     if (filtro.modulo != null) {
       query.where(_db.auditoria.modulo.equals(filtro.modulo!));

@@ -99,7 +99,7 @@ Future<void> _montar(
         AppRoutes.ventaRapida,
         AppRoutes.comprasNueva,
         AppRoutes.productosNuevo,
-        AppRoutes.importar,
+        AppRoutes.datos,
         AppRoutes.clientes,
       ])
         GoRoute(path: ruta, builder: (_, _) => destino('destino:$ruta')),

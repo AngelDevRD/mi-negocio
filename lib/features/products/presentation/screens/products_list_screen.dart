@@ -210,7 +210,7 @@ class _SinProductos extends StatelessWidget {
             ),
             if (esAdmin)
               TextButton(
-                onPressed: () => context.push(AppRoutes.importar),
+                onPressed: () => context.push(AppRoutes.datos),
                 child: const Text('Importar desde Excel'),
               ),
           ],

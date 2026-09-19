@@ -9,7 +9,6 @@ import '../../features/auth/presentation/providers/auth_providers.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/setup_screen.dart';
 import '../../features/auth/presentation/screens/users_management_screen.dart';
-import '../../features/backup/presentation/screens/backup_screen.dart';
 import '../../features/cash_register/presentation/screens/cash_register_close_screen.dart';
 import '../../features/cash_register/presentation/screens/cash_register_history_screen.dart';
 import '../../features/cash_register/presentation/screens/cash_register_screen.dart';
@@ -18,14 +17,13 @@ import '../../features/customers/presentation/screens/cliente_detail_screen.dart
 import '../../features/customers/presentation/screens/cliente_form_screen.dart';
 import '../../features/customers/presentation/screens/clientes_list_screen.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../../features/data/presentation/screens/data_screen.dart';
 import '../../features/employees/presentation/screens/employee_detail_screen.dart';
 import '../../features/employees/presentation/screens/employee_form_screen.dart';
 import '../../features/employees/presentation/screens/employees_list_screen.dart';
 import '../../features/employees/presentation/screens/payment_form_screen.dart';
 import '../../features/expenses/presentation/screens/expense_form_screen.dart';
 import '../../features/expenses/presentation/screens/expenses_list_screen.dart';
-import '../../features/exports/presentation/screens/exports_screen.dart';
-import '../../features/import/presentation/screens/import_screen.dart';
 import '../../features/inventory/presentation/screens/inventory_adjustment_screen.dart';
 import '../../features/license/domain/entities/licencia.dart';
 import '../../features/license/presentation/providers/license_providers.dart';
@@ -74,6 +72,10 @@ abstract final class AppRoutes {
   static const String empleadosNuevo = '/empleados/nuevo';
   static const String auditoria = '/auditoria';
   static const String analisis = '/analisis';
+  static const String datos = '/datos';
+
+  // Rutas antiguas de Datos: redirigen a [datos] (siguen funcionando enlaces y
+  // favoritos), igual que /inventario -> /productos.
   static const String exportaciones = '/exportaciones';
   static const String importar = '/importar';
   static const String respaldo = '/respaldo';
@@ -94,6 +96,7 @@ const _rutasSoloAdmin = {
   AppRoutes.cajaCerrar,
   AppRoutes.auditoria,
   AppRoutes.analisis,
+  AppRoutes.datos,
   AppRoutes.exportaciones,
   AppRoutes.importar,
   AppRoutes.respaldo,
@@ -389,16 +392,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AnalyticsScreen(),
       ),
       GoRoute(
+        path: AppRoutes.datos,
+        builder: (context, state) => const DataScreen(),
+      ),
+      // Exportaciones, importación y respaldo se fusionaron en Datos.
+      GoRoute(
         path: AppRoutes.exportaciones,
-        builder: (context, state) => const ExportsScreen(),
+        redirect: (context, state) => AppRoutes.datos,
       ),
       GoRoute(
         path: AppRoutes.importar,
-        builder: (context, state) => const ImportScreen(),
+        redirect: (context, state) => AppRoutes.datos,
       ),
       GoRoute(
         path: AppRoutes.respaldo,
-        builder: (context, state) => const BackupScreen(),
+        redirect: (context, state) => AppRoutes.datos,
       ),
       GoRoute(
         path: AppRoutes.perfil,

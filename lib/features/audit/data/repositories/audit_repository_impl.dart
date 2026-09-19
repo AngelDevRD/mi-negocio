@@ -25,9 +25,12 @@ class AuditRepositoryImpl implements AuditRepository {
   }
 
   @override
-  Stream<List<RegistroAuditoria>> watchRegistros(AuditoriaFiltro filtro) {
+  Stream<List<RegistroAuditoria>> watchRegistros(
+    AuditoriaFiltro filtro, {
+    int limite = limitePorDefectoAuditoria,
+  }) {
     return _local
-        .watchRegistros(filtro)
+        .watchRegistros(filtro, limite: limite)
         .map((filas) => filas.map(_aEntidad).toList());
   }
 

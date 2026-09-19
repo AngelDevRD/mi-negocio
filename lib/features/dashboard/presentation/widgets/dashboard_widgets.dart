@@ -778,7 +778,7 @@ class TarjetaBienvenida extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: TextButton(
-                onPressed: () => context.push(AppRoutes.importar),
+                onPressed: () => context.push(AppRoutes.datos),
                 child: const Text('Importar desde Excel'),
               ),
             ),

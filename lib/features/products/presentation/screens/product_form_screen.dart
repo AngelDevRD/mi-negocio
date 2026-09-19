@@ -24,8 +24,11 @@ const List<String> unidadesSugeridas = [
 /// nuevo (incluye stock inicial); si no, edita el existente (cambios de
 /// precio generan historial — RN-04).
 ///
-/// El margen en vivo (precio de venta − costo) solo lo ve el Administrador,
-/// igual que en el detalle del producto.
+/// El costo y el margen en vivo (precio de venta − costo) solo los ve el
+/// Administrador, igual que en el detalle del producto. Un Cajero puede
+/// abrir este formulario, pero no ve ni escribe el costo: al EDITAR se
+/// conserva el que ya tiene el producto, y al CREAR se guarda en 0 hasta que
+/// el Administrador lo complete.
 class ProductFormScreen extends ConsumerStatefulWidget {
   const ProductFormScreen({super.key, this.productId});
 
@@ -131,7 +134,15 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
     // Los validators ya garantizan que todo se puede leer; si por algún
     // motivo no fuera así, no se guarda nada en vez de lanzar.
-    final precioCompra = Money.tryParse(_precioCompraController.text);
+    final esAdmin = switch (usuario) {
+      SesionActiva(:final usuario) => usuario.esAdministrador,
+      _ => false,
+    };
+    // Sin permiso para ver el costo: se conserva el existente (edición; el
+    // controlador lo trae cargado) o queda en 0 (alta).
+    final precioCompra = esAdmin || _esEdicion
+        ? Money.tryParse(_precioCompraController.text)
+        : Money.zero;
     final precioVenta = Money.tryParse(_precioVentaController.text);
     final stockMinimo = double.tryParse(_stockMinimoController.text);
     final stockInicial = _esEdicion
@@ -355,24 +366,26 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _precioCompraController,
-                      decoration: const InputDecoration(
-                        labelText: 'Precio de compra',
-                        prefixText: 'RD\$ ',
+                  if (esAdmin) ...[
+                    Expanded(
+                      child: TextFormField(
+                        controller: _precioCompraController,
+                        decoration: const InputDecoration(
+                          labelText: 'Precio de compra',
+                          prefixText: 'RD\$ ',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                        validator: _validarPrecio,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.next,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                      ],
-                      validator: _validarPrecio,
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   Expanded(
                     child: TextFormField(
                       controller: _precioVentaController,
@@ -397,6 +410,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 _MargenEnVivo(
                   costo: Money.tryParse(_precioCompraController.text),
                   venta: Money.tryParse(_precioVentaController.text),
+                ),
+              ] else if (!_esEdicion) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'El costo del producto lo completa el administrador.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               const SizedBox(height: AppSpacing.sm),

@@ -32,6 +32,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------
@@ -737,6 +738,15 @@ class SesionVisual {
     await estabilizar(_tester);
   }
 
+  /// Abre el desplegable con la clave [clave] y elige [opcion] (el menú va
+  /// encima de la pantalla: se toca la ÚLTIMA coincidencia del texto).
+  Future<void> elegirEnLista(String clave, String opcion) async {
+    await _tester.tap(find.byKey(ValueKey(clave)));
+    await estabilizar(_tester);
+    await _tester.tap(find.text(opcion).last);
+    await estabilizar(_tester);
+  }
+
   /// Toca la flecha "volver" de la barra superior.
   Future<void> atras() async {
     await _tester.tap(find.byType(BackButton).first);
@@ -852,6 +862,7 @@ Future<SesionVisual> montarApp(
   required RolUsuario rol,
   required TamanoPantalla tamano,
   double textScale = 1.0,
+  List<Override> overrides = const [],
 }) async {
   // Los errores de Flutter (overflows, asserts de debug de la app) no deben
   // abortar la captura: se recolectan y se vuelcan a build/visual/errores.txt.
@@ -876,6 +887,7 @@ Future<SesionVisual> montarApp(
         appDatabaseProvider.overrideWithValue(base.db),
         licenseControllerProvider.overrideWith(_LicenciaActiva.new),
         authControllerProvider.overrideWith(() => _SesionActiva(usuario)),
+        ...overrides,
       ],
       child: const _AppVisual(),
     ),
@@ -905,6 +917,7 @@ Future<void> escenarioVisual(
   required RolUsuario rol,
   required TamanoPantalla tamano,
   double textScale = 1.0,
+  List<Override> overrides = const [],
   required Future<void> Function(SesionVisual sesion) cuerpo,
 }) async {
   final sesion = await montarApp(
@@ -914,6 +927,7 @@ Future<void> escenarioVisual(
     rol: rol,
     tamano: tamano,
     textScale: textScale,
+    overrides: overrides,
   );
   try {
     await cuerpo(sesion);
