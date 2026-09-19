@@ -226,7 +226,12 @@ class _ResumenCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: EdgeInsets.zero,
-      color: destacado ? scheme.secondaryContainer : null,
+      // Una pérdida no se resalta en verde: fondo de error, con texto legible.
+      color: destacado
+          ? (valor.isNegative
+                ? scheme.errorContainer
+                : scheme.secondaryContainer)
+          : null,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
@@ -715,6 +720,19 @@ class _GastosPorCategoriaChart extends ConsumerWidget {
                             ? '0%'
                             : '${(lista[i].total.cents * 100 / total).round()}%',
                         radius: 60,
+                        // Blanco sobre porciones oscuras y negro sobre claras: con
+                        // el negro fijo, "15%" sobre el índigo apenas se leía.
+                        titleStyle: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              ThemeData.estimateBrightnessForColor(
+                                    _colores[i % _colores.length],
+                                  ) ==
+                                  Brightness.dark
+                              ? Colors.white
+                              : Colors.black87,
+                        ),
                       ),
                   ],
                 ),

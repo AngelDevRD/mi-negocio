@@ -4,13 +4,21 @@ import '../../../../core/database/app_database.dart' hide Usuario;
 import '../../../../core/errors/result.dart';
 import '../../data/datasources/auth_local_datasource.dart';
 import '../../data/datasources/session_storage.dart';
+import '../../data/limitador_intentos_login.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/usuario.dart';
 import '../../domain/repositories/auth_repository.dart';
 
+/// Vive aparte del repositorio para que los bloqueos sobrevivan si el
+/// repositorio se reconstruye (p. ej. al cambiar la base tras restaurar).
+final limitadorIntentosLoginProvider = Provider<LimitadorIntentosLogin>(
+  (ref) => LimitadorIntentosLogin(),
+);
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     AuthLocalDatasource(ref.watch(appDatabaseProvider)),
+    limitador: ref.watch(limitadorIntentosLoginProvider),
   );
 });
 

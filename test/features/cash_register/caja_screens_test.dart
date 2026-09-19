@@ -310,6 +310,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Faltante'), findsOneWidget);
+      // El monto va sin signo: la palabra ya dice que falta (nada de "-RD$").
+      expect(find.text('RD\$ 5.00'), findsOneWidget);
+      expect(find.textContaining('-RD\$'), findsNothing);
+      expect(find.textContaining('RD\$ -'), findsNothing);
       expect(find.textContaining('Cerrada por Ana Admin'), findsOneWidget);
     });
 
@@ -511,6 +515,38 @@ void main() {
       expect(find.text('RD\$ 1,428.00'), findsWidgets);
     });
 
+    testWidgets('la diferencia dice "Faltante" o "Sobrante" y el monto va '
+        'SIN signo', (tester) async {
+      final repo = RepoCajaFalso(sesion: _sesion());
+      await _montar(tester, const CashRegisterCloseScreen(), repo);
+      // Vista alta: el resumen queda al final de una lista larga.
+      tester.view.physicalSize = const Size(420, 2600);
+      await tester.pumpAndSettle();
+      final contado = find.widgetWithText(
+        TextFormField,
+        'Monto contado en caja',
+      );
+
+      // Esperado RD$ 1,000.00 (la apertura): contando 950.00 faltan 50.00.
+      await tester.enterText(contado, '950');
+      await tester.pumpAndSettle();
+      expect(find.text('Faltante'), findsOneWidget);
+      expect(find.text('RD\$ 50.00'), findsOneWidget);
+      expect(find.textContaining('-RD\$ 50'), findsNothing);
+      expect(find.textContaining('RD\$ -50'), findsNothing);
+
+      // Contando 1,050.00 sobran 50.00.
+      await tester.enterText(contado, '1050');
+      await tester.pumpAndSettle();
+      expect(find.text('Sobrante'), findsOneWidget);
+      expect(find.text('RD\$ 50.00'), findsOneWidget);
+      expect(find.text('Faltante'), findsNothing);
+
+      await tester.enterText(contado, '1000');
+      await tester.pumpAndSettle();
+      expect(find.text('Sin diferencia'), findsOneWidget);
+    });
+
     testWidgets('sin abonos, entradas ni salidas no muestra esas líneas', (
       tester,
     ) async {
@@ -572,7 +608,9 @@ void main() {
 
       expect(find.text('Resumen del turno'), findsOneWidget);
       expect(find.text('Ventas del turno'), findsOneWidget);
-      expect(find.textContaining('Faltante'), findsOneWidget);
+      // "Faltante RD$ 5.00": una sola vez el sentido, sin doble signo.
+      expect(find.text('Faltante RD\$ 5.00'), findsOneWidget);
+      expect(find.textContaining('RD\$ -'), findsNothing);
       // Los movimientos van al final de una lista larga: hay que llegar a ellos.
       await tester.scrollUntilVisible(
         find.text('Servicio'),

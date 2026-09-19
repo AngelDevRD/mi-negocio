@@ -240,7 +240,8 @@ class _ResumenCierre extends StatelessWidget {
           children: [
             Text(etiqueta),
             Text(
-              diferencia.format(),
+              // Sin signo: la etiqueta ya dice si falta o sobra.
+              diferencia.abs.format(),
               style: TextStyle(color: color, fontWeight: FontWeight.bold),
             ),
           ],

@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import '../../../../core/errors/result.dart';
 import '../../domain/entities/import_target.dart';
 import '../../domain/repositories/import_repository.dart';
@@ -21,8 +23,18 @@ class ImportRepositoryImpl implements ImportRepository {
         );
       }
       return Result.ok(hojas);
-    } catch (e) {
-      return Result.fail(ValidationFailure('No se pudo leer el archivo: $e'));
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo leer el Excel',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        ValidationFailure(
+          'No se pudo leer el archivo. Comprueba que sea un Excel válido.',
+        ),
+      );
     }
   }
 
@@ -53,8 +65,19 @@ class ImportRepositoryImpl implements ImportRepository {
         );
       }
       return Result.ok(respuesta);
-    } catch (e) {
-      return Result.fail(NetworkFailure('Error de conexión con la IA: $e'));
+    } on Object catch (e, st) {
+      developer.log(
+        'Falló la sugerencia de mapeo con IA',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        NetworkFailure(
+          'No se pudo conectar con el asistente. Revisa tu conexión e '
+          'inténtalo de nuevo.',
+        ),
+      );
     }
   }
 
@@ -100,8 +123,16 @@ class ImportRepositoryImpl implements ImportRepository {
         ),
       };
       return Result.ok(resultado);
-    } catch (e) {
-      return Result.fail(DatabaseFailure('No se pudo importar: $e'));
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo importar',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        DatabaseFailure('No se pudo importar. Inténtalo de nuevo.'),
+      );
     }
   }
 }

@@ -57,7 +57,10 @@ void main() {
     test('formato RD\$', () {
       expect(const Money(125000).format(), 'RD\$ 1,250.00');
       expect(const Money(5).format(), 'RD\$ 0.05');
-      expect(const Money(-150075).format(), 'RD\$ -1,500.75');
+      expect(const Money(-150075).format(), '-RD\$ 1,500.75');
+      expect(const Money(-150075).format(symbol: false), '-1,500.75');
+      expect(const Money(-5).format(), '-RD\$ 0.05');
+      expect(const Money(0).format(), 'RD\$ 0.00');
       expect(const Money(125000).format(symbol: false), '1,250.00');
     });
 

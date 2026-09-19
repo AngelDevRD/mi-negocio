@@ -23,15 +23,23 @@ class PurchasesListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final comprasAsync = ref.watch(comprasProvider);
     final filtro = ref.watch(comprasFiltroProvider);
+    final sinCompras = comprasAsync.maybeWhen(
+      data: (c) => c.isEmpty && !filtro.activo,
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Compras')),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: null,
-        onPressed: () => context.push(AppRoutes.comprasNueva),
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva compra'),
-      ),
+      // Con la lista vacía la acción principal es la del estado vacío: el FAB
+      // se oculta para no duplicarla.
+      floatingActionButton: sinCompras
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: null,
+              onPressed: () => context.push(AppRoutes.comprasNueva),
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva compra'),
+            ),
       body: Column(
         children: [
           const _ComprasFiltroBar(),

@@ -36,6 +36,14 @@ class ProductsListScreen extends ConsumerWidget {
         : filtro.soloActivos == false
         ? _FiltroChip.inactivos
         : _FiltroChip.todos;
+    final sinFiltros =
+        filtro.busqueda.trim().isEmpty &&
+        filtro.categoriaId == null &&
+        chip == _FiltroChip.todos;
+    final sinProductos = productosAsync.maybeWhen(
+      data: (p) => p.isEmpty && sinFiltros,
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -57,14 +65,18 @@ class ProductsListScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        // Sin Hero: las pestañas del shell siguen montadas y sus FAB
-        // compartirían la etiqueta por defecto al abrir una ruta encima.
-        heroTag: null,
-        onPressed: () => context.push(AppRoutes.productosNuevo),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo producto'),
-      ),
+      // Con la lista vacía la acción principal es la del estado vacío: el FAB
+      // se oculta para no duplicarla.
+      floatingActionButton: sinProductos
+          ? null
+          : FloatingActionButton.extended(
+              // Sin Hero: las pestañas del shell siguen montadas y sus FAB
+              // compartirían la etiqueta por defecto al abrir una ruta encima.
+              heroTag: null,
+              onPressed: () => context.push(AppRoutes.productosNuevo),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo producto'),
+            ),
       body: Column(
         children: [
           Padding(
@@ -152,10 +164,6 @@ class ProductsListScreen extends ConsumerWidget {
               ),
               data: (productos) {
                 if (productos.isEmpty) {
-                  final sinFiltros =
-                      filtro.busqueda.trim().isEmpty &&
-                      filtro.categoriaId == null &&
-                      chip == _FiltroChip.todos;
                   return sinFiltros
                       ? _SinProductos(esAdmin: esAdmin)
                       : const EmptyState(

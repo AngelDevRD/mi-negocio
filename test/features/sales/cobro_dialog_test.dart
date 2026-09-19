@@ -2,6 +2,7 @@ import 'package:app_gestion/core/database/enums.dart';
 import 'package:app_gestion/core/theme/app_theme.dart';
 import 'package:app_gestion/core/utils/money.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/pos_widgets.dart';
+import 'package:app_gestion/features/sales/presentation/widgets/selector_metodo_pago.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -167,7 +168,7 @@ void main() {
 
       await tester.tap(
         find.descendant(
-          of: find.byType(SegmentedButton<MetodoPago>),
+          of: find.byType(SelectorMetodoPago),
           matching: find.text('Fiado'),
         ),
       );
@@ -182,7 +183,7 @@ void main() {
     });
 
     Finder segmento(String texto) => find.descendant(
-      of: find.byType(SegmentedButton<MetodoPago>),
+      of: find.byType(SelectorMetodoPago),
       matching: find.text(texto),
     );
 
@@ -196,10 +197,26 @@ void main() {
       }
       // El fiado se ofrece como cuarto método.
       expect(segmento('Fiado'), findsOneWidget);
-      final selector = tester.widget<SegmentedButton<MetodoPago>>(
-        find.byType(SegmentedButton<MetodoPago>),
+      final selector = tester.widget<SelectorMetodoPago>(
+        find.byType(SelectorMetodoPago),
       );
-      expect(selector.selected, {MetodoPago.efectivo});
+      expect(selector.seleccionado, MetodoPago.efectivo);
+      // Etiquetas a tamaño normal: nada las reduce (antes un FittedBox las
+      // dejaba diminutas).
+      expect(
+        find.descendant(
+          of: find.byType(SelectorMetodoPago),
+          matching: find.byType(FittedBox),
+        ),
+        findsNothing,
+      );
+      // La opción elegida se marca con ✓, no solo con color.
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, 'Efectivo'))
+            .selected,
+        isTrue,
+      );
       expect(find.text('Monto recibido'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Confirmar'), findsOneWidget);
     });

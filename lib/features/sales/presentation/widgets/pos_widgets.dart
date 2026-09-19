@@ -22,6 +22,7 @@ import '../../domain/entities/venta.dart';
 import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
 import 'selector_cliente.dart';
+import 'selector_metodo_pago.dart';
 
 bool _esAdministrador(WidgetRef ref) =>
     switch (ref.watch(authControllerProvider).value) {
@@ -1138,23 +1139,10 @@ class _CobroDialogState extends ConsumerState<CobroDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // FittedBox: con texto grande el selector se reduce en vez de
-              // desbordar el diálogo.
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SegmentedButton<MetodoPago>(
-                  showSelectedIcon: false,
-                  segments: [
-                    for (final metodo in _metodosDeCobro)
-                      ButtonSegment(
-                        value: metodo,
-                        label: Text(metodo.etiqueta),
-                      ),
-                  ],
-                  selected: {_metodo},
-                  onSelectionChanged: (seleccion) =>
-                      setState(() => _metodo = seleccion.single),
-                ),
+              SelectorMetodoPago(
+                metodos: _metodosDeCobro,
+                seleccionado: _metodo,
+                onCambio: (metodo) => setState(() => _metodo = metodo),
               ),
               const SizedBox(height: AppSpacing.md),
               Row(

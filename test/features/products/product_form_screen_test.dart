@@ -182,7 +182,7 @@ void main() {
       await tester.enterText(_campo('Precio de venta'), '80');
       await tester.pump();
 
-      expect(find.text('RD\$ -20.00'), findsOneWidget);
+      expect(find.text('-RD\$ 20.00'), findsOneWidget);
       expect(find.text('(-25%)'), findsOneWidget);
       expect(find.text('Vendes por debajo del costo'), findsOneWidget);
     });

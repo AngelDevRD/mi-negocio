@@ -35,16 +35,25 @@ class _ClientesListScreenState extends ConsumerState<ClientesListScreen> {
   Widget build(BuildContext context) {
     final clientes = ref.watch(clientesBusquedaProvider(_texto.trim()));
     final porCobrar = ref.watch(totalPorCobrarProvider).value ?? const Money(0);
+    final sinClientes = clientes.maybeWhen(
+      data: (todos) => todos.isEmpty && _texto.trim().isEmpty,
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Clientes y fiado')),
-      floatingActionButton: FloatingActionButton.extended(
-        // Sin Hero: varias pantallas con FAB pueden estar montadas a la vez.
-        heroTag: null,
-        onPressed: () => context.push(AppRoutes.clientesNuevo),
-        icon: const Icon(Icons.person_add_alt_1_outlined),
-        label: const Text('Nuevo cliente'),
-      ),
+      // Con la lista vacía la acción principal es la del estado vacío: el FAB
+      // se oculta para no duplicarla.
+      floatingActionButton: sinClientes
+          ? null
+          : FloatingActionButton.extended(
+              // Sin Hero: varias pantallas con FAB pueden estar montadas a la
+              // vez.
+              heroTag: null,
+              onPressed: () => context.push(AppRoutes.clientesNuevo),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text('Nuevo cliente'),
+            ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),

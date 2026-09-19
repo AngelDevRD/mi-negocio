@@ -11,6 +11,7 @@ import 'package:app_gestion/features/customers/presentation/screens/cliente_deta
 import 'package:app_gestion/features/customers/presentation/screens/cliente_form_screen.dart';
 import 'package:app_gestion/features/customers/presentation/screens/clientes_list_screen.dart';
 import 'package:app_gestion/features/profile/presentation/providers/profile_providers.dart';
+import 'package:app_gestion/features/sales/presentation/widgets/selector_metodo_pago.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -194,6 +195,8 @@ void main() {
       );
 
       expect(find.text('Aún no tienes clientes'), findsOneWidget);
+      // Una sola acción: el botón del estado vacío, sin FAB que la repita.
+      expect(find.byType(FloatingActionButton), findsNothing);
       await tester.tap(find.text('Agregar cliente'));
       await tester.pumpAndSettle();
       expect(find.text('destino:/clientes/nuevo'), findsOneWidget);
@@ -518,7 +521,7 @@ void main() {
 
       await tester.tap(
         find.descendant(
-          of: find.byType(SegmentedButton<MetodoPago>),
+          of: find.byType(SelectorMetodoPago),
           matching: find.text('Tarjeta'),
         ),
       );
@@ -561,7 +564,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(SegmentedButton<MetodoPago>),
+          of: find.byType(SelectorMetodoPago),
           matching: find.text('Fiado'),
         ),
         findsNothing,

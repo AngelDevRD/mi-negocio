@@ -71,9 +71,11 @@ class CashRegisterSessionDetailScreen extends ConsumerWidget {
               if (diferencia != null)
                 _DetalleFila(
                   etiqueta: 'Diferencia',
-                  valor:
-                      '${diferencia.format()} · '
-                      '${diferencia.isZero ? 'Sin diferencia' : (diferencia.isNegative ? 'Faltante' : 'Sobrante')}',
+                  // "Faltante RD$ 50.00" / "Sobrante RD$ 50.00": sin signo doble.
+                  valor: diferencia.isZero
+                      ? 'Sin diferencia'
+                      : '${diferencia.isNegative ? 'Faltante' : 'Sobrante'} '
+                            '${diferencia.abs.format()}',
                   color: diferencia.isZero
                       ? null
                       : (diferencia.isNegative

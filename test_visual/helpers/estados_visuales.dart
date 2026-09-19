@@ -36,9 +36,12 @@ class LicenciaVisual extends LicenseController {
 /// Sesión fija: sin negocio (configuración inicial) o sin sesión (login). El
 /// login SIEMPRE falla con el mismo mensaje que el repositorio real.
 class AuthVisual extends AuthController {
-  AuthVisual(this._estado);
+  AuthVisual(this._estado, {this.bloqueoSegundos});
 
   final EstadoSesion _estado;
+
+  /// Si se indica, el login responde "Demasiados intentos" con esa espera.
+  final int? bloqueoSegundos;
 
   @override
   Future<EstadoSesion> build() async => _estado;
@@ -47,7 +50,9 @@ class AuthVisual extends AuthController {
   Future<Failure?> login({
     required String username,
     required String password,
-  }) async => const ValidationFailure('Usuario o contraseña incorrectos.');
+  }) async => bloqueoSegundos != null
+      ? DemasiadosIntentosFailure(bloqueoSegundos!)
+      : const ValidationFailure('Usuario o contraseña incorrectos.');
 }
 
 /// Asistente de IA de mentira: responde siempre lo mismo.

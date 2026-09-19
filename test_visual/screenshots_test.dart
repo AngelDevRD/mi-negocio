@@ -678,6 +678,25 @@ void main() {
     );
   });
 
+  testWidgets('teléfono · entrada · login bloqueado por intentos', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · entrada · login bloqueado por intentos',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      autenticacion: () => AuthVisual(const SinSesion(), bloqueoSegundos: 30),
+      cuerpo: (sesion) async {
+        await sesion.escribir('Contraseña', 'incorrecta');
+        await sesion.tocarTexto('Entrar');
+        await sesion.capturar('login_bloqueado');
+      },
+    );
+  });
+
   testWidgets('teléfono · entrada · licencia bloqueada', (tester) async {
     final base = (await tester.runAsync(crearBaseDemo))!;
     await escenarioVisual(
@@ -824,6 +843,11 @@ void main() {
         await sesion.capturar('admin_cierre_caja');
         await sesion.mostrarTexto('Efectivo esperado');
         await sesion.capturar('admin_cierre_caja_resumen');
+
+        // Contando menos de lo esperado: "Faltante RD\$ X", sin signo doble.
+        await sesion.escribir('Monto contado en caja', '5000');
+        await sesion.mostrarTexto('Faltante');
+        await sesion.capturar('admin_cierre_caja_faltante');
       },
     );
   });

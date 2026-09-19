@@ -5,12 +5,15 @@ import '../../../../core/utils/password_hasher.dart';
 import '../../domain/entities/usuario.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
+import '../limitador_intentos_login.dart';
 
 /// Implementación de autenticación local con PBKDF2 (RF-AUTH).
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._local);
+  AuthRepositoryImpl(this._local, {LimitadorIntentosLogin? limitador})
+    : _limitador = limitador ?? LimitadorIntentosLogin();
 
   final AuthLocalDatasource _local;
+  final LimitadorIntentosLogin _limitador;
 
   static const int _passwordMinimo = 6;
   static const int _usernameMinimo = 3;
@@ -95,22 +98,31 @@ class AuthRepositoryImpl implements AuthRepository {
     required String username,
     required String password,
   }) async {
-    final fila = await _local.obtenerPorUsername(username.trim().toLowerCase());
-    if (fila == null || !fila.activo) {
+    final clave = username.trim().toLowerCase();
+    // Bloqueado: ni se consulta la base ni se verifica la contraseña.
+    final espera = _limitador.esperaRestante(clave);
+    if (espera != null) {
+      return Result.fail(DemasiadosIntentosFailure(espera.inSeconds));
+    }
+    final fila = await _local.obtenerPorUsername(clave);
+    // Usuario inexistente/inactivo y contraseña errónea cuentan igual y dan el
+    // mismo mensaje: no se revela cuál de los dos falló.
+    if (fila == null ||
+        !fila.activo ||
+        !await PasswordHasher.verificar(
+          password: password,
+          salt: fila.salt,
+          hashEsperado: fila.passwordHash,
+        )) {
+      final impuesta = _limitador.registrarFallo(clave);
+      if (impuesta != null) {
+        return Result.fail(DemasiadosIntentosFailure(impuesta.inSeconds));
+      }
       return const Result.fail(
         ValidationFailure('Usuario o contraseña incorrectos.'),
       );
     }
-    final valido = await PasswordHasher.verificar(
-      password: password,
-      salt: fila.salt,
-      hashEsperado: fila.passwordHash,
-    );
-    if (!valido) {
-      return const Result.fail(
-        ValidationFailure('Usuario o contraseña incorrectos.'),
-      );
-    }
+    _limitador.reiniciar(clave);
     return Result.ok(_aEntidad(fila));
   }
 

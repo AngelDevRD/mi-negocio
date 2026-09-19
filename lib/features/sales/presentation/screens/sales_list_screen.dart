@@ -33,17 +33,25 @@ class SalesListScreen extends ConsumerWidget {
       SesionActiva(:final usuario) => usuario.nombre,
       _ => null,
     };
+    final sinVentas = ventasAsync.maybeWhen(
+      data: (v) => v.isEmpty && !filtro.activo,
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ventas')),
-      floatingActionButton: FloatingActionButton.extended(
-        // Sin Hero: las pestañas del shell siguen montadas y sus FAB
-        // compartirían la etiqueta por defecto al abrir una ruta encima.
-        heroTag: null,
-        onPressed: () => context.push(AppRoutes.ventaRapida),
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva venta'),
-      ),
+      // Con la lista vacía la acción principal es la del estado vacío: el FAB
+      // se oculta para no duplicarla.
+      floatingActionButton: sinVentas
+          ? null
+          : FloatingActionButton.extended(
+              // Sin Hero: las pestañas del shell siguen montadas y sus FAB
+              // compartirían la etiqueta por defecto al abrir una ruta encima.
+              heroTag: null,
+              onPressed: () => context.push(AppRoutes.ventaRapida),
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva venta'),
+            ),
       body: Column(
         children: [
           const _VentasFiltroBar(),

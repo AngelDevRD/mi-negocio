@@ -21,6 +21,7 @@ import 'package:app_gestion/features/sales/presentation/screens/pos_screen.dart'
 import 'package:app_gestion/features/sales/presentation/screens/sales_list_screen.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/abrir_caja_dialog.dart';
 import 'package:app_gestion/features/sales/presentation/widgets/pos_widgets.dart';
+import 'package:app_gestion/features/sales/presentation/widgets/selector_metodo_pago.dart';
 import 'package:app_gestion/features/settings/presentation/providers/settings_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -727,7 +728,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
-          of: find.byType(SegmentedButton<MetodoPago>),
+          of: find.byType(SelectorMetodoPago),
           matching: find.text(metodo),
         ),
       );
@@ -797,7 +798,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
-          of: find.byType(SegmentedButton<MetodoPago>),
+          of: find.byType(SelectorMetodoPago),
           matching: find.text('Fiado'),
         ),
       );
@@ -1385,8 +1386,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // El FAB (con la lista vacía el estado vacío también ofrece "Nueva venta").
-      await tester.tap(find.byType(FloatingActionButton));
+      // Con la lista vacía la acción es el botón del estado vacío (el FAB se
+      // oculta para no duplicarla).
+      expect(find.byType(FloatingActionButton), findsNothing);
+      await tester.tap(find.widgetWithText(FilledButton, 'Nueva venta'));
       await tester.pumpAndSettle();
 
       expect(find.byType(PosScreen), findsOneWidget);

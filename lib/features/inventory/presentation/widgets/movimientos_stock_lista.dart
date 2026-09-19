@@ -88,7 +88,9 @@ class _MovimientoTile extends StatelessWidget {
           children: [
             Text(
               '$signo${formatoCantidad(movimiento.cantidad)}',
-              style: TextStyle(
+              // titleSmall (14): en el trailing de un ListTile el texto sin estilo
+              // salía a 11 px y el signo del movimiento apenas se leía.
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: esEntrada ? scheme.primary : scheme.error,
                 fontWeight: FontWeight.bold,
               ),

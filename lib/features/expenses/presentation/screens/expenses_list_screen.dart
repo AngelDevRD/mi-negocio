@@ -21,15 +21,23 @@ class ExpensesListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final gastosAsync = ref.watch(gastosProvider);
     final filtro = ref.watch(gastosFiltroProvider);
+    final sinGastos = gastosAsync.maybeWhen(
+      data: (g) => g.isEmpty && filtro.categoria == null,
+      orElse: () => false,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Gastos')),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: null,
-        onPressed: () => context.push(AppRoutes.gastosNuevo),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo gasto'),
-      ),
+      // Con la lista vacía la acción principal es la del estado vacío: el FAB
+      // se oculta para no duplicarla.
+      floatingActionButton: sinGastos
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: null,
+              onPressed: () => context.push(AppRoutes.gastosNuevo),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo gasto'),
+            ),
       body: Column(
         children: [
           const _GastosFiltroBar(),

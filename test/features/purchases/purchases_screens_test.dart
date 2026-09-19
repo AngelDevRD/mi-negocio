@@ -335,6 +335,8 @@ void main() {
       expect(find.text('Aún no hay compras'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Nueva compra'), findsOneWidget);
       expect(find.text('Sin resultados para este filtro'), findsNothing);
+      // Una sola acción: el botón del estado vacío, sin FAB que la repita.
+      expect(find.byType(FloatingActionButton), findsNothing);
     });
 
     testWidgets('con filtro y sin coincidencias: "Sin resultados" y "Quitar '
@@ -352,6 +354,7 @@ void main() {
 
       expect(find.text('Sin resultados para este filtro'), findsOneWidget);
       expect(find.text('Aún no hay compras'), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
 
       await tester.tap(find.text('Quitar filtros'));
       await tester.pumpAndSettle();

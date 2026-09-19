@@ -255,7 +255,7 @@ void main() {
       expect(find.text('julio 2026'), findsOneWidget);
       expect(find.text('agosto 2026'), findsOneWidget);
       expect(find.text('septiembre 2026'), findsOneWidget);
-      expect(find.text('RD\$ -3,000.00'), findsOneWidget); // pérdida de agosto
+      expect(find.text('-RD\$ 3,000.00'), findsOneWidget); // pérdida de agosto
       expect(find.text('RD\$ 15,000.00'), findsOneWidget); // ganancia sept.
     });
 

@@ -244,6 +244,8 @@ void main() {
       expect(find.text('Agregar producto'), findsOneWidget);
       expect(find.text('Importar desde Excel'), findsOneWidget);
       expect(find.text('Sin resultados para este filtro'), findsNothing);
+      // Una sola acción: el botón del estado vacío, sin FAB que la repita.
+      expect(find.byType(FloatingActionButton), findsNothing);
     });
 
     testWidgets('el cajero no ve "Importar desde Excel"', (tester) async {

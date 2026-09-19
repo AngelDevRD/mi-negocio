@@ -881,6 +881,11 @@ Future<SesionVisual> montarApp(
     errores.update(_resumir(detalles), (v) => v + 1, ifAbsent: () => 1);
   };
 
+  // flutter_test apaga las sombras y las dibuja como un contorno negro sólido
+  // (así los FAB salen con un aro negro que la app real no tiene). Se activan
+  // para que la captura sea fiel; escenarioVisual lo devuelve al terminar.
+  debugDisableShadows = false;
+
   tester.view.physicalSize = Size(tamano.ancho * 2, tamano.alto * 2);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
@@ -950,5 +955,8 @@ Future<void> escenarioVisual(
     await cuerpo(sesion);
   } finally {
     await sesion.cerrar();
+    // El binding lo verifica al terminar el cuerpo del test (antes de los
+    // tearDown): hay que devolverlo aquí.
+    debugDisableShadows = true;
   }
 }

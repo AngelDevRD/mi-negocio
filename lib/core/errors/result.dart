@@ -74,6 +74,18 @@ final class PermissionFailure extends Failure {
   const PermissionFailure(super.message);
 }
 
+/// Login bloqueado temporalmente por demasiados intentos fallidos.
+final class DemasiadosIntentosFailure extends Failure {
+  DemasiadosIntentosFailure(this.segundos) : super(mensajeDeEspera(segundos));
+
+  /// Segundos que faltan para poder volver a intentar.
+  final int segundos;
+
+  static String mensajeDeEspera(int segundos) => segundos == 1
+      ? 'Demasiados intentos. Espera 1 segundo.'
+      : 'Demasiados intentos. Espera $segundos segundos.';
+}
+
 /// Licencia inválida, suspendida o vencida (RN-15).
 final class LicenseFailure extends Failure {
   const LicenseFailure(super.message);

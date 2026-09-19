@@ -8,7 +8,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/money_text.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../../../sales/presentation/metodo_pago_texto.dart';
+import '../../../sales/presentation/widgets/selector_metodo_pago.dart';
 import '../../domain/entities/cliente.dart';
 import '../providers/customers_providers.dart';
 
@@ -161,20 +161,10 @@ class _AbonoDialogState extends ConsumerState<AbonoDialog> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SegmentedButton<MetodoPago>(
-                  showSelectedIcon: false,
-                  segments: [
-                    for (final metodo in _metodosDeAbono)
-                      ButtonSegment(
-                        value: metodo,
-                        label: Text(metodo.etiqueta),
-                      ),
-                  ],
-                  selected: {_metodo},
-                  onSelectionChanged: (s) => setState(() => _metodo = s.single),
-                ),
+              SelectorMetodoPago(
+                metodos: _metodosDeAbono,
+                seleccionado: _metodo,
+                onCambio: (metodo) => setState(() => _metodo = metodo),
               ),
               const SizedBox(height: AppSpacing.md),
               TextField(

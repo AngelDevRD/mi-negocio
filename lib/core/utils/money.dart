@@ -43,6 +43,10 @@ class Money implements Comparable<Money> {
   bool get isNegative => cents < 0;
   bool get isZero => cents == 0;
 
+  /// Valor sin signo. Para mostrar faltantes ("Faltante RD$ 50.00"), donde la
+  /// palabra ya dice el sentido y un "-" sería un doble signo.
+  Money get abs => Money(cents.abs());
+
   Money operator +(Money other) => Money(cents + other.cents);
   Money operator -(Money other) => Money(cents - other.cents);
   Money operator *(int factor) => Money(cents * factor);
@@ -54,10 +58,12 @@ class Money implements Comparable<Money> {
 
   static final NumberFormat _formatter = NumberFormat('#,##0.00', 'en_US');
 
-  /// Formato de presentación: `RD$ 1,250.00`.
+  /// Formato de presentación: `RD$ 1,250.00`. Un negativo lleva el signo
+  /// delante del símbolo (`-RD$ 1,250.00`), como los movimientos de caja.
   String format({bool symbol = true}) {
-    final text = _formatter.format(cents / 100);
-    return symbol ? 'RD\$ $text' : text;
+    final text = _formatter.format(cents.abs() / 100);
+    final signo = cents < 0 ? '-' : '';
+    return symbol ? '${signo}RD\$ $text' : '$signo$text';
   }
 
   @override

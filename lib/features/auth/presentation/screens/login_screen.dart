@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/result.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../domain/entities/usuario.dart';
@@ -27,15 +29,57 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _enviando = false;
   String? _error;
 
+  /// Segundos de espera que le quedan a cada usuario bloqueado (por intentos
+  /// fallidos). Un solo temporizador los descuenta a todos.
+  final Map<String, int> _esperas = {};
+  Timer? _cuentaRegresiva;
+
+  int get _esperaActual => _esperas[_seleccionado?.username] ?? 0;
+
   @override
   void dispose() {
+    _cuentaRegresiva?.cancel();
     _passwordController.dispose();
     _passwordFocus.dispose();
     super.dispose();
   }
 
+  void _iniciarCuentaRegresiva(String username, int segundos) {
+    _esperas[username] = segundos;
+    _cuentaRegresiva ??= Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _descontar(),
+    );
+  }
+
+  void _descontar() {
+    if (!mounted) return;
+    final terminaronAhora = <String>[];
+    setState(() {
+      for (final usuario in _esperas.keys.toList()) {
+        final restante = _esperas[usuario]! - 1;
+        if (restante <= 0) {
+          _esperas.remove(usuario);
+          terminaronAhora.add(usuario);
+        } else {
+          _esperas[usuario] = restante;
+        }
+      }
+    });
+    if (_esperas.isEmpty) {
+      _cuentaRegresiva?.cancel();
+      _cuentaRegresiva = null;
+    }
+    // El usuario elegido ya puede intentar de nuevo: foco en la contraseña.
+    if (terminaronAhora.contains(_seleccionado?.username)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _passwordFocus.requestFocus();
+      });
+    }
+  }
+
   Future<void> _entrar() async {
-    if (_enviando) return;
+    if (_enviando || _esperaActual > 0) return;
     final usuario = _seleccionado;
     if (usuario == null) {
       setState(() => _error = 'Selecciona un usuario.');
@@ -46,6 +90,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     String? mensaje;
+    int? segundosDeEspera;
     try {
       final fallo = await ref
           .read(authControllerProvider.notifier)
@@ -53,7 +98,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             username: usuario.username,
             password: _passwordController.text,
           );
-      mensaje = fallo?.message;
+      if (fallo is DemasiadosIntentosFailure) {
+        // El mensaje lo arma la cuenta regresiva (no queda uno viejo al acabar).
+        segundosDeEspera = fallo.segundos;
+      } else {
+        mensaje = fallo?.message;
+      }
     } on Object catch (e, st) {
       // Solo el error; nunca la contraseña.
       developer.log(
@@ -68,8 +118,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() {
       _enviando = false;
       _error = mensaje;
+      if (segundosDeEspera != null) {
+        _iniciarCuentaRegresiva(usuario.username, segundosDeEspera);
+      }
     });
-    if (mensaje != null) {
+    if (mensaje != null || segundosDeEspera != null) {
       // Se borra lo escrito y se vuelve a la contraseña para reintentar.
       _passwordController.clear();
       // El campo se rehabilita en el próximo cuadro: se pide el foco después.
@@ -84,6 +137,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final usuariosAsync = ref.watch(usuariosActivosProvider);
+    final espera = _esperaActual;
+    // Mientras dura el bloqueo el mensaje sigue la cuenta regresiva.
+    final mensajeError = espera > 0
+        ? DemasiadosIntentosFailure.mensajeDeEspera(espera)
+        : _error;
 
     return Scaffold(
       body: SafeArea(
@@ -168,10 +226,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       );
                     },
                   ),
-                  if (_error != null) ...[
+                  if (mensajeError != null) ...[
                     const SizedBox(height: AppSpacing.sm),
                     Semantics(
-                      liveRegion: true,
+                      // La cuenta regresiva cambia cada segundo: no se anuncia
+                      // en cada tick.
+                      liveRegion: espera == 0,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(width: AppSpacing.xs),
                           Flexible(
                             child: Text(
-                              _error!,
+                              mensajeError,
                               style: TextStyle(color: scheme.error),
                               textAlign: TextAlign.center,
                             ),
@@ -195,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                   const SizedBox(height: AppSpacing.lg),
                   FilledButton(
-                    onPressed: _enviando ? null : _entrar,
+                    onPressed: _enviando || espera > 0 ? null : _entrar,
                     child: _enviando
                         ? const SizedBox(
                             height: 20,

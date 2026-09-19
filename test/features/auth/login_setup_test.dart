@@ -36,6 +36,9 @@ class _AuthFalso extends AuthController {
   Object? lanzar;
 
   final intentos = <({String username, String password})>[];
+
+  /// Segundos de bloqueo que el "repositorio" impone por usuario al fallar.
+  final bloqueos = <String, int>{};
   final registros = <Map<String, Object?>>[];
   Failure? falloRegistro;
 
@@ -51,6 +54,8 @@ class _AuthFalso extends AuthController {
     await bloqueo?.future;
     if (lanzar != null) throw lanzar!;
     if (password == 'correcta') return null;
+    final segundos = bloqueos[username];
+    if (segundos != null) return DemasiadosIntentosFailure(segundos);
     // Mismo mensaje del repositorio real, exista o no el usuario.
     return const ValidationFailure('Usuario o contraseña incorrectos.');
   }
@@ -229,6 +234,137 @@ void main() {
       expect(find.textContaining('locked'), findsNothing);
       expect(find.textContaining('secreto123'), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    group('límite de intentos', () {
+      Finder entrar() => find.widgetWithText(FilledButton, 'Entrar');
+      Future<void> fallar(WidgetTester tester) async {
+        await tester.enterText(_campoPassword, 'mala');
+        await tester.tap(entrar());
+        await tester.pump();
+        await tester.pump();
+      }
+
+      testWidgets('bloqueado: mensaje con cuenta regresiva y "Entrar" '
+          'deshabilitado', (tester) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 30;
+
+        await fallar(tester);
+
+        expect(
+          find.text('Demasiados intentos. Espera 30 segundos.'),
+          findsOneWidget,
+        );
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNull);
+
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          find.text('Demasiados intentos. Espera 29 segundos.'),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(seconds: 10));
+        expect(
+          find.text('Demasiados intentos. Espera 19 segundos.'),
+          findsOneWidget,
+        );
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNull);
+      });
+
+      testWidgets('con el botón deshabilitado Enter tampoco envía', (
+        tester,
+      ) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 30;
+        await fallar(tester);
+        expect(auth.intentos.length, 1);
+
+        await tester.enterText(_campoPassword, 'correcta');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+
+        expect(auth.intentos.length, 1);
+      });
+
+      testWidgets('al terminar la espera se habilita, desaparece el mensaje y '
+          'vuelve el foco a la contraseña', (tester) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 3;
+        await fallar(tester);
+
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pump();
+
+        expect(find.textContaining('Demasiados intentos'), findsNothing);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNotNull);
+        final campo = tester.widget<EditableText>(
+          find.descendant(
+            of: _campoPassword,
+            matching: find.byType(EditableText),
+          ),
+        );
+        expect(campo.focusNode.hasFocus, isTrue);
+
+        // Y se puede entrar con la contraseña correcta.
+        auth.bloqueos.clear();
+        await tester.enterText(_campoPassword, 'correcta');
+        await tester.tap(entrar());
+        await tester.pump();
+        expect(auth.intentos.length, 2);
+      });
+
+      testWidgets('singular: "Espera 1 segundo."', (tester) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 1;
+        await fallar(tester);
+
+        expect(
+          find.text('Demasiados intentos. Espera 1 segundo.'),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+      });
+
+      testWidgets('el bloqueo es de ese usuario: al elegir a otro se puede '
+          'entrar, y al volver sigue bloqueado', (tester) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 30;
+        await fallar(tester);
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNull);
+
+        await tester.tap(find.byType(DropdownButtonFormField<Usuario>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Carlos Cajero').last);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Demasiados intentos'), findsNothing);
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNotNull);
+
+        await tester.tap(find.byType(DropdownButtonFormField<Usuario>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Ana Admin').last);
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Demasiados intentos. Espera'),
+          findsOneWidget,
+        );
+        expect(tester.widget<FilledButton>(entrar()).onPressed, isNull);
+
+        await tester.pump(const Duration(seconds: 31));
+      });
+
+      testWidgets('salir de la pantalla cancela la cuenta regresiva (sin '
+          'temporizadores colgados)', (tester) async {
+        final auth = await _montar(tester, const LoginScreen());
+        auth.bloqueos['ana'] = 30;
+        await fallar(tester);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 40));
+
+        expect(tester.takeException(), isNull);
+      });
     });
 
     testWidgets('cargando usuarios: indicador con mensaje', (tester) async {

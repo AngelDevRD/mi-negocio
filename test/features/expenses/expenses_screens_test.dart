@@ -226,6 +226,8 @@ void main() {
       expect(find.text('Sin gastos en $mesActual'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Nuevo gasto'), findsOneWidget);
       expect(find.text('Sin resultados para este filtro'), findsNothing);
+      // Una sola acción: el botón del estado vacío, sin FAB que la repita.
+      expect(find.byType(FloatingActionButton), findsNothing);
     });
 
     testWidgets('categoría sin gastos: "Sin resultados" y "Quitar filtro"', (
@@ -238,6 +240,7 @@ void main() {
 
       expect(find.text('Sin resultados para este filtro'), findsOneWidget);
       expect(find.text('Sin gastos en $mesActual'), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
 
       await tester.tap(find.text('Quitar filtro'));
       await tester.pumpAndSettle();

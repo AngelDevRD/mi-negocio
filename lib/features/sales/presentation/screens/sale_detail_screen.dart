@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../metodo_pago_texto.dart';
@@ -161,12 +162,15 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
                   child: ListTile(
                     title: Text(item.productoNombre),
                     subtitle: Text(
-                      '${item.cantidad.toStringAsFixed(2)} x '
+                      '${formatoCantidad(item.cantidad)} x '
                       '${item.precioUnitario.format()}',
                     ),
+                    // titleSmall: sin estilo, el trailing del ListTile salía a 11 px.
                     trailing: Text(
                       item.subtotal.format(),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -262,12 +266,15 @@ class _DetalleFila extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 110,
+            width: 120,
             child: Text(
               etiqueta,
-              style: TextStyle(color: Theme.of(context).colorScheme.outline),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(child: Text(valor)),
         ],
       ),

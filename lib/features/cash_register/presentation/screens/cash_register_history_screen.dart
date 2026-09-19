@@ -93,7 +93,8 @@ class CashRegisterHistoryList extends ConsumerWidget {
                     ),
                     if (!diferencia.isZero)
                       MoneyText(
-                        diferencia,
+                        // Sin signo: la etiqueta ya dice si falta o sobra.
+                        diferencia.abs,
                         textAlign: TextAlign.right,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
