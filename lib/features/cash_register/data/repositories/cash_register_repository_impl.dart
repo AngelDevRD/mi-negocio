@@ -1,4 +1,5 @@
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/database/permisos.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
 import '../../../customers/data/datasources/customers_local_datasource.dart'
@@ -138,13 +139,19 @@ class CashRegisterRepositoryImpl implements CashRegisterRepository {
       (suma, m) => suma + m.monto,
     );
 
-    await _local.cerrarCaja(
-      sesionId: fila.id,
-      montoEsperadoCents: montoEsperado,
-      montoContadoCents: montoContado.cents,
-      montoDejarSiguienteCents: montoDejarSiguiente.cents,
-      usuarioId: usuarioId,
-    );
+    try {
+      await _local.cerrarCaja(
+        sesionId: fila.id,
+        montoEsperadoCents: montoEsperado,
+        montoContadoCents: montoContado.cents,
+        montoDejarSiguienteCents: montoDejarSiguiente.cents,
+        usuarioId: usuarioId,
+      );
+    } on SinPermisoException {
+      return const Result.fail(
+        PermissionFailure('Solo el administrador puede cerrar la caja.'),
+      );
+    }
     return const Result.ok(null);
   }
 

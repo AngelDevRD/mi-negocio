@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/payloads/auditoria_payload.dart';
 import '../../../../core/sync/payloads/operacion_payloads.dart';
@@ -320,6 +321,8 @@ class CashRegisterLocalDatasource {
     required String usuarioId,
   }) {
     return _db.transaction(() async {
+      // Solo Administrador (defensa en profundidad; ver permisos.dart).
+      await exigirAdministrador(_db, usuarioId);
       final sesion = await (_db.select(
         _db.cajaSesiones,
       )..where((t) => t.id.equals(sesionId))).getSingle();

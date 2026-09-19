@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../domain/entities/export_models.dart';
+import '../celda_segura.dart';
 import '../export_pdf_theme.dart';
 
 /// Genera el reporte de empleados y sus pagos por rango (RF-EXP-02).
@@ -31,9 +31,9 @@ class EmpleadosExportBuilder {
     for (final empleado in empleados) {
       if (empleado.pagos.isEmpty) {
         filas.add([
-          empleado.nombre,
+          libre(empleado.nombre),
           empleado.tipo,
-          empleado.cedula ?? '',
+          libre(empleado.cedula),
           _fecha.format(empleado.fechaIngreso.toLocal()),
           empleado.activo ? 'Sí' : 'No',
           empleado.totalPagado.format(symbol: false),
@@ -45,15 +45,15 @@ class EmpleadosExportBuilder {
       }
       for (final pago in empleado.pagos) {
         filas.add([
-          empleado.nombre,
+          libre(empleado.nombre),
           empleado.tipo,
-          empleado.cedula ?? '',
+          libre(empleado.cedula),
           _fecha.format(empleado.fechaIngreso.toLocal()),
           empleado.activo ? 'Sí' : 'No',
           empleado.totalPagado.format(symbol: false),
           _fecha.format(pago.fecha.toLocal()),
           pago.monto.format(symbol: false),
-          pago.periodo ?? '',
+          libre(pago.periodo),
         ]);
       }
     }
@@ -77,7 +77,7 @@ class EmpleadosExportBuilder {
 
   static List<int> csv(List<EmpleadoExportRow> empleados) {
     final filas = [_encabezados, ..._filas(empleados)];
-    final texto = const ListToCsvConverter().convert(filas);
+    final texto = csvSeguro(filas);
     return [0xEF, 0xBB, 0xBF, ...utf8.encode(texto)];
   }
 

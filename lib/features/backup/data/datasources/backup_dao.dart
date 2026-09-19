@@ -30,10 +30,31 @@ class BackupDao {
     return resultado;
   }
 
+  /// `true` si TODAS las columnas de TODAS las filas de [datos] existen en su
+  /// tabla. Los nombres de columna salen del JSON del respaldo y se
+  /// concatenan en el `INSERT` de [restaurarDatos]: un respaldo manipulado
+  /// podría colar SQL en ellos. Se comprueba ANTES de tocar la base. (Una fila
+  /// con MENOS columnas que la tabla es válida: las que faltan toman su
+  /// valor por defecto.)
+  bool datosCompatibles(Map<String, List<Map<String, Object?>>> datos) {
+    for (final tabla in _db.allTables) {
+      final columnas = {for (final c in tabla.$columns) c.name};
+      for (final fila in datos[tabla.actualTableName] ?? const []) {
+        if (!fila.keys.every(columnas.contains)) return false;
+      }
+    }
+    return true;
+  }
+
   /// Reemplaza TODOS los datos locales por los de [datos] (RN-21):
   /// borra cada tabla y reinserta las filas del respaldo en una sola
   /// transacción. Los FKs se desactivan durante el proceso porque el orden
   /// de borrado/inserción no respeta las dependencias entre tablas.
+  ///
+  /// Una tabla AUSENTE en [datos] (p. ej. `venta_pagos`, `clientes` o
+  /// `movimientos_cliente` en un respaldo hecho antes de la v2/v3) queda
+  /// VACÍA: primero se borran todas las tablas y solo se reinsertan las que
+  /// vienen, así la restauración es una foto fiel del respaldo.
   Future<void> restaurarDatos(
     Map<String, List<Map<String, Object?>>> datos,
   ) async {

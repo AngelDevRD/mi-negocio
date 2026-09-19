@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/payloads/auditoria_payload.dart';
 import '../../../../core/sync/payloads/operacion_payloads.dart';
@@ -428,10 +429,7 @@ class PurchasesLocalDatasource {
     required String usuarioId,
   }) {
     return _db.transaction(() async {
-      final usuario = await (_db.select(
-        _db.usuarios,
-      )..where((t) => t.id.equals(usuarioId))).getSingleOrNull();
-      if (usuario == null || usuario.rol != RolUsuario.administrador) {
+      if (!await esAdministrador(_db, usuarioId)) {
         return const AnulacionCompraLocal(EstadoAnulacionCompra.sinPermiso);
       }
       final compra = await (_db.select(

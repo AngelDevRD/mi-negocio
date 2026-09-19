@@ -1,12 +1,12 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../../core/utils/money.dart';
 import '../../../domain/entities/export_models.dart';
+import '../celda_segura.dart';
 import '../export_pdf_theme.dart';
 
 /// Genera el reporte de inventario valorizado (RF-EXP-02/RF-ANL-02).
@@ -28,9 +28,9 @@ class InventarioExportBuilder {
     return productos
         .map(
           (p) => [
-            p.nombre,
-            p.categoria,
-            p.unidad,
+            libre(p.nombre),
+            libre(p.categoria),
+            libre(p.unidad),
             p.stockActual,
             p.precioCompra.format(symbol: false),
             p.precioVenta.format(symbol: false),
@@ -58,7 +58,7 @@ class InventarioExportBuilder {
 
   static List<int> csv(List<InventarioExportRow> productos) {
     final filas = [_encabezados, ..._filas(productos)];
-    final texto = const ListToCsvConverter().convert(filas);
+    final texto = csvSeguro(filas);
     return [0xEF, 0xBB, 0xBF, ...utf8.encode(texto)];
   }
 

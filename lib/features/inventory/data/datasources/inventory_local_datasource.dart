@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/payloads/auditoria_payload.dart';
 import '../../../../core/sync/payloads/producto_payloads.dart';
@@ -89,6 +90,28 @@ class InventoryLocalDatasource {
   // ---------------------------------------------------------------------
   // Movimientos (RN-03/RF-INV-04)
   // ---------------------------------------------------------------------
+
+  /// Ajuste manual (RF-INV-03/RN-19, solo Administrador): el rol se comprueba
+  /// como primera lectura DENTRO de la misma transacción del movimiento (ver
+  /// permisos.dart) y lanza [SinPermisoException] sin escribir nada.
+  Future<void> ajusteManual({
+    required Producto producto,
+    required TipoMovimientoInventario tipo,
+    required double cantidad,
+    required String motivo,
+    required String usuarioId,
+  }) {
+    return _db.transaction(() async {
+      await exigirAdministrador(_db, usuarioId);
+      await applyMovement(
+        producto: producto,
+        tipo: tipo,
+        cantidad: cantidad,
+        motivo: motivo,
+        usuarioId: usuarioId,
+      );
+    });
+  }
 
   /// Único punto de cambio de stock: actualiza `productos.stock_actual`,
   /// inserta el movimiento con el stock resultante y registra auditoría.

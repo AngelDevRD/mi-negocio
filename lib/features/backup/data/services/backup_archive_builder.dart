@@ -5,9 +5,15 @@ import 'package:archive/archive.dart';
 import '../../domain/entities/backup_manifest.dart';
 
 /// Excepción lanzada cuando el ZIP no es un respaldo válido (manifest
-/// ausente o corrupto) -- CU-12, alternativo A2.
+/// ausente o corrupto, entradas con rutas peligrosas...) -- CU-12,
+/// alternativo A2.
 class BackupFormatException implements Exception {
   const BackupFormatException(this.mensaje);
+
+  /// Mensaje genérico para un respaldo manipulado o dañado: no se detalla qué
+  /// entrada falló (no ayuda al usuario y sí a quien manipuló el archivo).
+  const BackupFormatException.invalido()
+    : mensaje = 'El respaldo no es válido o está dañado.';
 
   final String mensaje;
 
@@ -80,6 +86,15 @@ class BackupArchiveBuilder {
           as Map<String, dynamic>,
     );
 
+    // Se valida el NOMBRE de TODAS las entradas antes de leer ninguna: un
+    // respaldo con una sola ruta peligrosa se rechaza completo (zip slip).
+    for (final archivo in archive.files) {
+      rutaRelativaSegura(archivo.name);
+      if (archivo.name.startsWith('media/')) {
+        rutaRelativaSegura(archivo.name.substring('media/'.length));
+      }
+    }
+
     final datos = <String, List<Map<String, Object?>>>{};
     final media = <String, List<int>>{};
     for (final archivo in archive.files) {
@@ -101,6 +116,35 @@ class BackupArchiveBuilder {
     }
 
     return BackupArchive(manifest: manifest, datos: datos, media: media);
+  }
+
+  /// Normaliza [nombre] (nombre de una entrada del ZIP o ruta de una foto) a
+  /// una ruta RELATIVA con separador `/`, o lanza [BackupFormatException] si
+  /// podría escribir fuera de la carpeta destino (zip slip): ruta absoluta
+  /// (`/x`, `\x`, `C:\x`), cualquier segmento `..` (con `/` o `\`), caracteres
+  /// de control o `:` (unidades y flujos alternos de Windows) o ruta vacía.
+  ///
+  /// Un respaldo que se GENERA nunca contiene nada de eso, así que se rechaza
+  /// de forma estricta en vez de intentar "arreglar" la ruta.
+  static String rutaRelativaSegura(String nombre) {
+    const invalido = BackupFormatException.invalido();
+    if (nombre.isEmpty || nombre.runes.any((c) => c < 0x20 || c == 0x7f)) {
+      throw invalido;
+    }
+    final normalizado = nombre.replaceAll('\\', '/');
+    if (normalizado.startsWith('/') ||
+        RegExp(r'^[A-Za-z]:').hasMatch(normalizado)) {
+      throw invalido;
+    }
+    final segmentos = [
+      for (final s in normalizado.split('/'))
+        if (s.isNotEmpty && s != '.') s,
+    ];
+    if (segmentos.isEmpty ||
+        segmentos.any((s) => s == '..' || s.contains(':'))) {
+      throw invalido;
+    }
+    return segmentos.join('/');
   }
 
   static void _agregarJson(Archive archive, String nombre, Object? contenido) {

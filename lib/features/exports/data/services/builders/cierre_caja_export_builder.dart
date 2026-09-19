@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../domain/entities/export_models.dart';
+import '../celda_segura.dart';
 import '../export_pdf_theme.dart';
 
 /// Genera el reporte de cierre de una sesión de caja (RF-EXP-02).
@@ -26,8 +26,8 @@ class CierreCajaExportBuilder {
             ? ''
             : _fecha.format(cierre.fechaCierre!.toLocal()),
       ],
-      ['Usuario apertura', cierre.usuarioApertura],
-      ['Usuario cierre', cierre.usuarioCierre ?? ''],
+      ['Usuario apertura', libre(cierre.usuarioApertura)],
+      ['Usuario cierre', libre(cierre.usuarioCierre)],
       ['Monto apertura', cierre.montoApertura.format(symbol: false)],
       ['Monto esperado', cierre.montoEsperado?.format(symbol: false) ?? ''],
       ['Monto contado', cierre.montoContado?.format(symbol: false) ?? ''],
@@ -46,7 +46,7 @@ class CierreCajaExportBuilder {
             _fecha.format(m.fecha.toLocal()),
             m.tipo,
             m.monto.format(symbol: false),
-            m.motivo ?? '',
+            libre(m.motivo),
           ],
         )
         .toList();
@@ -87,7 +87,7 @@ class CierreCajaExportBuilder {
       _encabezadosMovimientos,
       ..._filasMovimientos(cierre),
     ];
-    final texto = const ListToCsvConverter().convert(filas);
+    final texto = csvSeguro(filas);
     return [0xEF, 0xBB, 0xBF, ...utf8.encode(texto)];
   }
 

@@ -1,5 +1,6 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/enums.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
 import '../../../products/domain/entities/producto.dart';
@@ -97,30 +98,39 @@ class InventoryRepositoryImpl implements InventoryRepository {
     required double cantidad,
     required String motivo,
     required String usuarioId,
-  }) {
+  }) async {
     final motivoLimpio = motivo.trim();
     if (motivoLimpio.isEmpty) {
-      return Future.value(
-        const Result.fail(
-          ValidationFailure('El motivo del ajuste es obligatorio.'),
-        ),
+      return const Result.fail(
+        ValidationFailure('El motivo del ajuste es obligatorio.'),
       );
     }
     if (cantidad == 0) {
-      return Future.value(
-        const Result.fail(
-          ValidationFailure('La cantidad del ajuste no puede ser cero.'),
-        ),
+      return const Result.fail(
+        ValidationFailure('La cantidad del ajuste no puede ser cero.'),
       );
     }
-    return applyMovement(
-      productoId: productoId,
-      tipo: cantidad > 0
-          ? TipoMovimientoInventario.ajusteEntrada
-          : TipoMovimientoInventario.ajusteSalida,
-      cantidad: cantidad,
-      motivo: motivoLimpio,
-      usuarioId: usuarioId,
-    );
+    final producto = await _local.obtenerProducto(productoId);
+    if (producto == null) {
+      return const Result.fail(
+        ValidationFailure('El producto no existe o fue eliminado.'),
+      );
+    }
+    try {
+      await _local.ajusteManual(
+        producto: producto,
+        tipo: cantidad > 0
+            ? TipoMovimientoInventario.ajusteEntrada
+            : TipoMovimientoInventario.ajusteSalida,
+        cantidad: cantidad,
+        motivo: motivoLimpio,
+        usuarioId: usuarioId,
+      );
+    } on SinPermisoException {
+      return const Result.fail(
+        PermissionFailure('Solo el administrador puede ajustar el inventario.'),
+      );
+    }
+    return const Result.ok(null);
   }
 }

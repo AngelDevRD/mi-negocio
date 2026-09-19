@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/payloads/auditoria_payload.dart';
 import '../../../../core/sync/payloads/operacion_payloads.dart';
@@ -351,9 +352,10 @@ class SalesLocalDatasource {
       if (metodoPago == MetodoPago.credito) {
         final cliente = clienteId == null
             ? null
-            : await (_db.select(_db.clientes)
-                    ..where((t) => t.id.equals(clienteId) & t.deletedAt.isNull()))
-                .getSingleOrNull();
+            : await (_db.select(_db.clientes)..where(
+                    (t) => t.id.equals(clienteId) & t.deletedAt.isNull(),
+                  ))
+                  .getSingleOrNull();
         if (cliente == null || !cliente.activo) {
           throw ClienteNoDisponibleException(clienteId ?? '');
         }
@@ -533,6 +535,8 @@ class SalesLocalDatasource {
   /// existe o ya estaba anulada; `true` si la anulación se aplicó.
   Future<bool> anularVenta(String id, {required String usuarioId}) {
     return _db.transaction(() async {
+      // Solo Administrador (defensa en profundidad; ver permisos.dart).
+      await exigirAdministrador(_db, usuarioId);
       final venta = await (_db.select(
         _db.ventas,
       )..where((t) => t.id.equals(id))).getSingleOrNull();

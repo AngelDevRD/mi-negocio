@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../domain/entities/export_models.dart';
+import '../celda_segura.dart';
 import '../export_pdf_theme.dart';
 
 /// Genera el reporte de ventas por rango con líneas (RF-EXP-02).
@@ -37,7 +37,7 @@ class VentasExportBuilder {
           _fecha.format(venta.fecha.toLocal()),
           venta.id,
           venta.tipo,
-          venta.usuario,
+          libre(venta.usuario),
           venta.estado,
           '',
           '',
@@ -55,9 +55,9 @@ class VentasExportBuilder {
           _fecha.format(venta.fecha.toLocal()),
           venta.id,
           venta.tipo,
-          venta.usuario,
+          libre(venta.usuario),
           venta.estado,
-          item.producto,
+          libre(item.producto),
           item.cantidad,
           item.precioUnitario.format(symbol: false),
           item.costoUnitario.format(symbol: false),
@@ -87,7 +87,7 @@ class VentasExportBuilder {
 
   static List<int> csv(List<VentaExportRow> ventas) {
     final filas = [_encabezados, ..._filas(ventas)];
-    final texto = const ListToCsvConverter().convert(filas);
+    final texto = csvSeguro(filas);
     return [0xEF, 0xBB, 0xBF, ...utf8.encode(texto)];
   }
 

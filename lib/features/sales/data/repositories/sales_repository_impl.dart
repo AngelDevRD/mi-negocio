@@ -1,5 +1,6 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/enums.dart';
+import '../../../../core/database/permisos.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
@@ -214,7 +215,14 @@ class SalesRepositoryImpl implements SalesRepository {
     }
     // RN-10: el datasource revalida el estado dentro de la transacción
     // (defensa contra doble anulación por llamadas concurrentes).
-    final aplicado = await _local.anularVenta(id, usuarioId: usuarioId);
+    final bool aplicado;
+    try {
+      aplicado = await _local.anularVenta(id, usuarioId: usuarioId);
+    } on SinPermisoException {
+      return const Result.fail(
+        PermissionFailure('Solo el administrador puede anular ventas.'),
+      );
+    }
     if (!aplicado) {
       return const Result.fail(ValidationFailure('La venta ya está anulada.'));
     }

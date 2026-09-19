@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../domain/entities/export_models.dart';
+import '../celda_segura.dart';
 import '../export_pdf_theme.dart';
 
 /// Genera el reporte de compras por rango con líneas (RF-EXP-02).
@@ -35,9 +35,9 @@ class ComprasExportBuilder {
         filas.add([
           _fecha.format(compra.fecha.toLocal()),
           compra.id,
-          compra.proveedor ?? '',
-          compra.numeroFactura ?? '',
-          compra.usuario,
+          libre(compra.proveedor),
+          libre(compra.numeroFactura),
+          libre(compra.usuario),
           compra.estado,
           '',
           '',
@@ -52,11 +52,11 @@ class ComprasExportBuilder {
         filas.add([
           _fecha.format(compra.fecha.toLocal()),
           compra.id,
-          compra.proveedor ?? '',
-          compra.numeroFactura ?? '',
-          compra.usuario,
+          libre(compra.proveedor),
+          libre(compra.numeroFactura),
+          libre(compra.usuario),
           compra.estado,
-          item.producto,
+          libre(item.producto),
           item.cantidad,
           item.costoUnitario.format(symbol: false),
           subtotal.format(symbol: false),
@@ -84,7 +84,7 @@ class ComprasExportBuilder {
 
   static List<int> csv(List<CompraExportRow> compras) {
     final filas = [_encabezados, ..._filas(compras)];
-    final texto = const ListToCsvConverter().convert(filas);
+    final texto = csvSeguro(filas);
     return [0xEF, 0xBB, 0xBF, ...utf8.encode(texto)];
   }
 
