@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_states.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../providers/cash_register_providers.dart';
+import '../widgets/resumen_turno_view.dart';
 
 /// Cierre de caja (RF-CAJ/RN-08): el usuario cuenta el efectivo, el sistema
 /// muestra el monto esperado y la diferencia, y define cuánto dinero queda
@@ -73,12 +75,19 @@ class _CashRegisterCloseScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Cerrar caja')),
       body: sesionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text('No se pudo cargar el estado de caja.')),
+        loading: () => const LoadingView(),
+        error: (error, stackTrace) => ErrorState(
+          mensaje: 'No se pudo cargar el estado de caja.',
+          error: error,
+          stackTrace: stackTrace,
+          onReintentar: () => ref.invalidate(sesionActualProvider),
+        ),
         data: (sesion) {
           if (sesion == null) {
-            return const Center(child: Text('No hay una caja abierta.'));
+            return const EmptyState(
+              icono: Icons.lock_outline,
+              titulo: 'No hay una caja abierta',
+            );
           }
           final montoEsperado = sesion.montoActual;
           // tryParse en vez de parse: mientras el cajero teclea, el texto
@@ -92,6 +101,7 @@ class _CashRegisterCloseScreenState
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
                 Card(
+                  margin: EdgeInsets.zero,
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
@@ -115,6 +125,8 @@ class _CashRegisterCloseScreenState
                     ),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                ResumenTurnoSeccion(sesionId: sesion.id),
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _montoContadoController,

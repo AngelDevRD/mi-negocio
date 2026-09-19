@@ -1,11 +1,18 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
+import '../../../customers/data/datasources/customers_local_datasource.dart'
+    show SinCajaAbiertaException;
 import '../../domain/entities/caja_sesion.dart';
+import '../../domain/entities/resumen_turno.dart';
 import '../../domain/repositories/cash_register_repository.dart';
 import '../datasources/cash_register_local_datasource.dart';
 
-/// Implementación de caja diaria (RF-CAJ): sesión actual, historial y cierre.
+/// Largo máximo del motivo de un movimiento manual.
+const _motivoMaximo = 120;
+
+/// Implementación de caja diaria (RF-CAJ): sesión actual, historial, cierre,
+/// movimientos manuales y arqueo.
 class CashRegisterRepositoryImpl implements CashRegisterRepository {
   CashRegisterRepositoryImpl(this._local);
 
@@ -140,4 +147,59 @@ class CashRegisterRepositoryImpl implements CashRegisterRepository {
     );
     return const Result.ok(null);
   }
+
+  @override
+  Future<Result<void>> registrarMovimientoManual({
+    required bool entrada,
+    required Money monto,
+    required String motivo,
+    required String usuarioId,
+  }) async {
+    if (monto.cents <= 0) {
+      return const Result.fail(
+        ValidationFailure('El monto debe ser mayor que cero.'),
+      );
+    }
+    final motivoLimpio = motivo.trim();
+    if (motivoLimpio.isEmpty) {
+      return const Result.fail(ValidationFailure('Indica el motivo.'));
+    }
+    if (motivoLimpio.length > _motivoMaximo) {
+      return const Result.fail(
+        ValidationFailure(
+          'El motivo no puede pasar de $_motivoMaximo caracteres.',
+        ),
+      );
+    }
+
+    try {
+      await _local.registrarMovimientoManual(
+        entrada: entrada,
+        montoCents: monto.cents,
+        motivo: motivoLimpio,
+        usuarioId: usuarioId,
+      );
+      return const Result.ok(null);
+    } on SinCajaAbiertaException {
+      return const Result.fail(
+        BusinessRuleFailure(
+          'Debe abrir una caja antes de registrar movimientos de efectivo.',
+          rule: 'RN-01',
+        ),
+      );
+    } on SalidaExcedeEfectivoException catch (e) {
+      return Result.fail(
+        BusinessRuleFailure(
+          'No hay suficiente efectivo en la caja: hay '
+          '${Money(e.disponible).format()} y la salida es de '
+          '${Money(e.monto).format()}.',
+          rule: 'CAJA-SALIDA',
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<ResumenTurno?> obtenerResumenTurno(String sesionId) =>
+      _local.obtenerResumenTurno(sesionId);
 }

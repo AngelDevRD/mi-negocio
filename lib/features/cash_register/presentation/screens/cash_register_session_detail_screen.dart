@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_states.dart';
 import '../providers/cash_register_providers.dart';
+import '../widgets/movimiento_caja_tile.dart';
+import '../widgets/resumen_turno_view.dart';
 
 /// Detalle de una sesión de caja (abierta o cerrada): apertura, cierre,
-/// montos esperado/contado/diferencia y movimientos del día.
+/// montos esperado/contado/diferencia, resumen del turno por método de pago y
+/// movimientos del día.
 class CashRegisterSessionDetailScreen extends ConsumerWidget {
   const CashRegisterSessionDetailScreen({super.key, required this.sesionId});
 
@@ -21,12 +24,19 @@ class CashRegisterSessionDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle de cierre')),
       body: sesionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text('No se pudo cargar la sesión.')),
+        loading: () => const LoadingView(),
+        error: (error, stackTrace) => ErrorState(
+          mensaje: 'No se pudo cargar la sesión.',
+          error: error,
+          stackTrace: stackTrace,
+          onReintentar: () => ref.invalidate(sesionCajaProvider(sesionId)),
+        ),
         data: (sesion) {
           if (sesion == null) {
-            return const Center(child: Text('Sesión no encontrada.'));
+            return const EmptyState(
+              icono: Icons.lock_outline,
+              titulo: 'Sesión no encontrada',
+            );
           }
           final scheme = Theme.of(context).colorScheme;
           final diferencia = sesion.diferencia;
@@ -61,7 +71,9 @@ class CashRegisterSessionDetailScreen extends ConsumerWidget {
               if (diferencia != null)
                 _DetalleFila(
                   etiqueta: 'Diferencia',
-                  valor: diferencia.format(),
+                  valor:
+                      '${diferencia.format()} · '
+                      '${diferencia.isZero ? 'Sin diferencia' : (diferencia.isNegative ? 'Faltante' : 'Sobrante')}',
                   color: diferencia.isZero
                       ? null
                       : (diferencia.isNegative
@@ -73,37 +85,24 @@ class CashRegisterSessionDetailScreen extends ConsumerWidget {
                   etiqueta: 'Dejado para mañana',
                   valor: sesion.montoDejadoSiguiente!.format(),
                 ),
-              const Divider(height: AppSpacing.lg * 2),
+              const SizedBox(height: AppSpacing.md),
+              ResumenTurnoSeccion(sesionId: sesion.id),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 'Movimientos',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: AppSpacing.sm),
               if (sesion.movimientos.isEmpty)
-                const Text('Esta sesión no tiene movimientos.')
+                const EmptyState(
+                  compacto: true,
+                  icono: Icons.receipt_long_outlined,
+                  titulo: 'Esta sesión no tiene movimientos',
+                )
               else
-                Card(
-                  child: Column(
-                    children: [
-                      for (final movimiento in sesion.movimientos)
-                        ListTile(
-                          leading: Icon(_iconoMovimiento(movimiento.tipo)),
-                          title: Text(_tituloMovimiento(movimiento.tipo)),
-                          subtitle: Text(
-                            formatoFecha.format(movimiento.fecha.toLocal()),
-                          ),
-                          trailing: Text(
-                            movimiento.monto.format(),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: movimiento.monto.isNegative
-                                  ? scheme.error
-                                  : null,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                MovimientosCajaCard(
+                  movimientos: sesion.movimientos,
+                  fechaCompleta: true,
                 ),
             ],
           );
@@ -111,28 +110,6 @@ class CashRegisterSessionDetailScreen extends ConsumerWidget {
       ),
     );
   }
-
-  IconData _iconoMovimiento(TipoCajaMovimiento tipo) => switch (tipo) {
-    TipoCajaMovimiento.venta => Icons.point_of_sale,
-    TipoCajaMovimiento.gasto => Icons.receipt_long_outlined,
-    TipoCajaMovimiento.compra => Icons.shopping_cart_outlined,
-    TipoCajaMovimiento.pagoEmpleado => Icons.people_outline,
-    TipoCajaMovimiento.entradaManual => Icons.add_circle_outline,
-    TipoCajaMovimiento.salidaManual => Icons.remove_circle_outline,
-    TipoCajaMovimiento.retiroCierre => Icons.lock_outline,
-    TipoCajaMovimiento.abonoCliente => Icons.payments_outlined,
-  };
-
-  String _tituloMovimiento(TipoCajaMovimiento tipo) => switch (tipo) {
-    TipoCajaMovimiento.venta => 'Venta',
-    TipoCajaMovimiento.gasto => 'Gasto',
-    TipoCajaMovimiento.compra => 'Compra',
-    TipoCajaMovimiento.pagoEmpleado => 'Pago a empleado',
-    TipoCajaMovimiento.entradaManual => 'Entrada manual',
-    TipoCajaMovimiento.salidaManual => 'Salida manual',
-    TipoCajaMovimiento.retiroCierre => 'Retiro de cierre',
-    TipoCajaMovimiento.abonoCliente => 'Abono de cliente',
-  };
 }
 
 class _DetalleFila extends StatelessWidget {
@@ -153,7 +130,9 @@ class _DetalleFila extends StatelessWidget {
             width: 130,
             child: Text(
               etiqueta,
-              style: TextStyle(color: Theme.of(context).colorScheme.outline),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           Expanded(

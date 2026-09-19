@@ -46,6 +46,13 @@ void main() {
         await sesion.ir('/caja');
         await sesion.capturar('admin_caja');
 
+        // Salida manual de efectivo: motivo rÃ¡pido en chip.
+        await sesion.tocarTexto('Salida');
+        await sesion.escribir('Monto', '150');
+        await sesion.tocarTexto('Delivery');
+        await sesion.capturar('admin_caja_salida_dialogo');
+        await sesion.tocarTexto('Cancelar');
+
         await sesion.ir('/productos');
         await sesion.capturar('admin_productos');
 
@@ -77,6 +84,10 @@ void main() {
         await sesion.ir('/mas');
         await sesion.capturar('cajero_mas');
 
+        // Caja del cajero: Entrada y Salida, sin Cerrar caja.
+        await sesion.ir('/caja');
+        await sesion.capturar('cajero_caja');
+
         // Detalle de producto del cajero: sin costo, margen ni "Ajustar stock".
         await sesion.ir('/productos');
         await sesion.tocarTexto('Arroz selecto');
@@ -97,6 +108,16 @@ void main() {
       tamano: TamanoPantalla.telefono,
       cuerpo: (sesion) async {
         await sesion.capturar('caja_cerrada_inicio');
+
+        // PestaÃ±a Caja cerrada, historial y detalle de un cierre con su resumen.
+        await sesion.ir('/caja');
+        await sesion.capturar('caja_cerrada');
+        await sesion.tocarTexto('Historial');
+        await sesion.capturar('caja_historial');
+        await sesion.tocarTextoQueContiene('Cerrada por');
+        await sesion.capturar('caja_cierre_detalle');
+        await sesion.mostrarTexto('Efectivo esperado');
+        await sesion.capturar('caja_cierre_detalle_resumen');
       },
     );
   });
@@ -384,6 +405,8 @@ void main() {
 
         await sesion.ir('/caja/cerrar', apilar: true);
         await sesion.capturar('admin_cierre_caja');
+        await sesion.mostrarTexto('Efectivo esperado');
+        await sesion.capturar('admin_cierre_caja_resumen');
       },
     );
   });

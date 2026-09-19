@@ -10,6 +10,22 @@ import '../../../../core/sync/sync_queue_writer.dart';
 import '../../../customers/data/datasources/customers_local_datasource.dart';
 import '../../../inventory/data/datasources/inventory_local_datasource.dart';
 
+/// Pagos de una venta. Regla de compatibilidad ÚNICA: una venta SIN filas en
+/// `venta_pagos` (todas las anteriores a la v2) se trata como un pago en
+/// EFECTIVO por su [total]. Es una función suelta (como `saldoDeCliente`) para
+/// que otros módulos, como el arqueo de caja, la reutilicen en vez de repetirla.
+Future<List<({MetodoPago metodo, int monto})>> pagosDeVenta(
+  AppDatabase db,
+  String ventaId,
+  int total,
+) async {
+  final filas = await (db.select(
+    db.ventaPagos,
+  )..where((t) => t.ventaId.equals(ventaId))).get();
+  if (filas.isEmpty) return [(metodo: MetodoPago.efectivo, monto: total)];
+  return [for (final f in filas) (metodo: f.metodo, monto: f.monto)];
+}
+
 /// Ítem de entrada para [SalesLocalDatasource.registrarVenta].
 class VentaItemEntrada {
   const VentaItemEntrada({
@@ -103,19 +119,12 @@ class SalesLocalDatasource {
     return await query.getSingleOrNull() != null;
   }
 
-  /// Pagos de una venta. Regla de compatibilidad ÚNICA: una venta SIN filas en
-  /// `venta_pagos` (todas las anteriores a la v2) se trata como un pago en
-  /// EFECTIVO por su [total].
+  /// Pagos de una venta (ver [pagosDeVenta]: la venta sin `venta_pagos` cuenta
+  /// como efectivo).
   Future<List<({MetodoPago metodo, int monto})>> obtenerPagos(
     String ventaId,
     int total,
-  ) async {
-    final filas = await (_db.select(
-      _db.ventaPagos,
-    )..where((t) => t.ventaId.equals(ventaId))).get();
-    if (filas.isEmpty) return [(metodo: MetodoPago.efectivo, monto: total)];
-    return [for (final f in filas) (metodo: f.metodo, monto: f.monto)];
-  }
+  ) => pagosDeVenta(_db, ventaId, total);
 
   Future<void> _insertarMovimientoCliente({
     required String clienteId,

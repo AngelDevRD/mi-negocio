@@ -1,6 +1,7 @@
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
 import '../entities/caja_sesion.dart';
+import '../entities/resumen_turno.dart';
 
 /// Operaciones de caja diaria (RF-CAJ): sesión actual, historial y cierre.
 abstract interface class CashRegisterRepository {
@@ -26,4 +27,18 @@ abstract interface class CashRegisterRepository {
     required Money montoDejarSiguiente,
     required String usuarioId,
   });
+
+  /// Registra una entrada o salida manual de efectivo en la caja abierta, en
+  /// una sola transacción (con auditoría y cola de sync). Exige caja abierta
+  /// (RN-01), [monto] > 0 y [motivo] de 1 a 120 caracteres. Una salida no puede
+  /// dejar el efectivo de la caja en negativo.
+  Future<Result<void>> registrarMovimientoManual({
+    required bool entrada,
+    required Money monto,
+    required String motivo,
+    required String usuarioId,
+  });
+
+  /// Arqueo de la sesión (SOLO LECTURA), o `null` si la sesión no existe.
+  Future<ResumenTurno?> obtenerResumenTurno(String sesionId);
 }

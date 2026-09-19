@@ -49,6 +49,7 @@ class EmptyState extends StatelessWidget {
     this.descripcion,
     this.accionLabel,
     this.onAccion,
+    this.accionPrimaria = false,
     this.compacto = false,
   });
 
@@ -57,6 +58,10 @@ class EmptyState extends StatelessWidget {
   final String? descripcion;
   final String? accionLabel;
   final VoidCallback? onAccion;
+
+  /// `true`: la acción es LA acción principal de la pantalla (botón relleno,
+  /// no tonal). Úsalo cuando el estado vacío es todo lo que hay en pantalla.
+  final bool accionPrimaria;
   final bool compacto;
 
   @override
@@ -85,7 +90,10 @@ class EmptyState extends StatelessWidget {
         ],
         if (accionLabel != null && onAccion != null) ...[
           SizedBox(height: compacto ? AppSpacing.sm : AppSpacing.md),
-          FilledButton.tonal(onPressed: onAccion, child: Text(accionLabel!)),
+          if (accionPrimaria)
+            FilledButton(onPressed: onAccion, child: Text(accionLabel!))
+          else
+            FilledButton.tonal(onPressed: onAccion, child: Text(accionLabel!)),
         ],
       ],
     );

@@ -189,8 +189,11 @@ Future<BaseDemo> crearBaseDemo({
   if (!vacia) await _sembrarMovimientos(db, admin.id);
   if (cajaCerrada && !vacia) {
     final caja = CashRegisterRepositoryImpl(CashRegisterLocalDatasource(db));
+    // Se cuenta RD$ 50 menos de lo esperado: el cierre queda con un faltante
+    // chico y el detalle del historial lo rotula.
+    final esperado = (await caja.watchSesionActual().first)!.montoActual;
     await caja.cerrarCaja(
-      montoContado: const Money(861400),
+      montoContado: esperado - Money.fromPesos(50),
       montoDejarSiguiente: const Money(500000),
       usuarioId: admin.id,
     );
@@ -403,6 +406,36 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
     usuarioId: usuarioId,
   );
 
+  // Ventas por tarjeta y transferencia: no tocan la caja, pero salen en el
+  // resumen del turno del cierre.
+  await ventas.registrarVenta(
+    tipo: TipoVenta.rapida,
+    items: [item(refresco, 3)],
+    usuarioId: usuarioId,
+    metodoPago: MetodoPago.tarjeta,
+  );
+  await ventas.registrarVenta(
+    tipo: TipoVenta.rapida,
+    items: [item(salami, 1)],
+    usuarioId: usuarioId,
+    metodoPago: MetodoPago.transferencia,
+  );
+
+  // Entrada y salida manuales de efectivo del turno.
+  final caja = CashRegisterRepositoryImpl(CashRegisterLocalDatasource(db));
+  await caja.registrarMovimientoManual(
+    entrada: true,
+    monto: Money.fromPesos(200),
+    motivo: 'Cambio',
+    usuarioId: usuarioId,
+  );
+  await caja.registrarMovimientoManual(
+    entrada: false,
+    monto: Money.fromPesos(150),
+    motivo: 'Pago a Pedro, el delivery',
+    usuarioId: usuarioId,
+  );
+
   // Compras de reposición.
   final proveedor = (await compras.crearProveedor(
     nombre: 'Distribuidora Caribe',
@@ -601,6 +634,32 @@ class SesionVisual {
       );
     }
     await _tester.tap(buscado.first);
+    await estabilizar(_tester);
+  }
+
+  /// Toca el primer widget cuyo texto CONTIENE [fragmento] (para textos con
+  /// datos variables, como una fecha).
+  Future<void> tocarTextoQueContiene(String fragmento) async {
+    await _tester.tap(find.textContaining(fragmento).first);
+    await estabilizar(_tester);
+  }
+
+  /// Escribe [texto] en el campo de formulario con la etiqueta [etiqueta].
+  Future<void> escribir(String etiqueta, String texto) async {
+    await _tester.enterText(
+      find.widgetWithText(TextFormField, etiqueta),
+      texto,
+    );
+    await estabilizar(_tester);
+  }
+
+  /// Desplaza la lista hasta que [texto] se vea (sin tocarlo).
+  Future<void> mostrarTexto(String texto) async {
+    await _tester.scrollUntilVisible(
+      find.text(texto),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await estabilizar(_tester);
   }
 
