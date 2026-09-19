@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/app_database.dart' hide Compra, CompraItem;
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/utils/rango_fecha.dart';
 import '../../data/datasources/purchases_local_datasource.dart';
 import '../../data/repositories/purchases_repository_impl.dart';
 import '../../domain/entities/compra.dart';
@@ -19,20 +20,32 @@ final proveedoresProvider = StreamProvider<List<Proveedor>>((ref) {
   return ref.watch(purchasesRepositoryProvider).watchProveedores();
 });
 
-/// Filtros activos de la lista de compras.
+/// Filtros activos de la lista de compras. [desde]/[hasta] solo cuentan con
+/// [RangoFecha.personalizado] (ver `VentasFiltro`).
 class ComprasFiltro {
-  const ComprasFiltro({this.proveedorId, this.desde, this.hasta});
+  const ComprasFiltro({
+    this.proveedorId,
+    this.rango = RangoFecha.todo,
+    this.desde,
+    this.hasta,
+  });
 
   final String? proveedorId;
+  final RangoFecha rango;
   final DateTime? desde;
   final DateTime? hasta;
 
+  /// `true` si hay algún filtro activo (proveedor o fecha).
+  bool get activo => proveedorId != null || rango != RangoFecha.todo;
+
   ComprasFiltro copyWith({
     Object? proveedorId = _sinCambio,
+    RangoFecha? rango,
     Object? desde = _sinCambio,
     Object? hasta = _sinCambio,
   }) {
     return ComprasFiltro(
+      rango: rango ?? this.rango,
       proveedorId: proveedorId == _sinCambio
           ? this.proveedorId
           : proveedorId as String?,
@@ -60,12 +73,18 @@ class ComprasFiltroController extends Notifier<ComprasFiltro> {
 
 final comprasProvider = StreamProvider<List<Compra>>((ref) {
   final filtro = ref.watch(comprasFiltroProvider);
+  final limites = limitesDeRango(
+    filtro.rango,
+    DateTime.now(),
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+  );
   return ref
       .watch(purchasesRepositoryProvider)
       .watchCompras(
         proveedorId: filtro.proveedorId,
-        desde: filtro.desde,
-        hasta: filtro.hasta,
+        desde: limites.desde,
+        hasta: limites.hasta,
       );
 });
 

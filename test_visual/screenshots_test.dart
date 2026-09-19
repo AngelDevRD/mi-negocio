@@ -43,6 +43,18 @@ void main() {
         await sesion.ir('/ventas');
         await sesion.capturar('admin_ventas');
 
+        // Filtro de fecha con texto: el menú y una semana filtrada.
+        await sesion.tocarTexto('Todas las fechas');
+        await sesion.capturar('admin_ventas_filtro_fecha');
+        await sesion.tocarTexto('Esta semana');
+        await sesion.capturar('admin_ventas_semana');
+        await sesion.tocarTexto('Esta semana');
+        await sesion.tocarTexto('Todas las fechas');
+
+        // Más abajo: los días anteriores, cada uno con su total.
+        await sesion.mostrarTexto('Ayer');
+        await sesion.capturar('admin_ventas_ayer');
+
         await sesion.ir('/caja');
         await sesion.capturar('admin_caja');
 
@@ -172,6 +184,9 @@ void main() {
 
         await sesion.ir('/productos');
         await sesion.capturar('admin_productos');
+
+        await sesion.ir('/ventas');
+        await sesion.capturar('admin_ventas');
 
         await sesion.ir('/clientes');
         await sesion.capturar('admin_clientes');
@@ -380,6 +395,34 @@ void main() {
         await sesion.tocarTexto('Carmen Suárez');
         await sesion.capturar('pos_cobro_fiado');
         await sesion.tocarTexto('Cancelar');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · compras y gastos', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · compras y gastos',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.ir('/compras', apilar: true);
+        await sesion.capturar('admin_compras');
+        await sesion.tocarTextoQueContiene('Factura F-1042');
+        await sesion.capturar('admin_compra_detalle');
+
+        // Formulario de compra: vacío y con un producto (total siempre visible).
+        await sesion.ir('/compras/nueva', apilar: true);
+        await sesion.capturar('admin_compra_formulario_vacio');
+        await sesion.tocarTexto('Agregar producto');
+        await sesion.tocarTexto('Arroz selecto');
+        await sesion.tocarTexto('Agregar');
+        await sesion.capturar('admin_compra_formulario');
+
+        await sesion.ir('/gastos', apilar: true);
+        await sesion.capturar('admin_gastos');
       },
     );
   });

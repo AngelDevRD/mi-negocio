@@ -6,21 +6,28 @@ import 'package:intl/intl.dart';
 import '../../../../core/database/enums.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/fechas.dart';
+import '../../../../core/utils/money.dart';
+import '../../../../core/utils/rango_fecha.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../domain/entities/compra.dart';
 import '../providers/purchases_providers.dart';
 
-/// Lista de compras (RF-COM): filtro por proveedor y rango de fechas, más
-/// reciente primero.
+/// Lista de compras (RF-COM), más reciente primero y AGRUPADA POR DÍA con el
+/// total comprado ese día (sin las anuladas). Filtros con texto: proveedor y
+/// período (Hoy / Esta semana / Este mes / Personalizado).
 class PurchasesListScreen extends ConsumerWidget {
   const PurchasesListScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final comprasAsync = ref.watch(comprasProvider);
+    final filtro = ref.watch(comprasFiltroProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Compras')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: () => context.push(AppRoutes.comprasNueva),
         icon: const Icon(Icons.add),
         label: const Text('Nueva compra'),
@@ -30,28 +37,37 @@ class PurchasesListScreen extends ConsumerWidget {
           const _ComprasFiltroBar(),
           Expanded(
             child: comprasAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const Center(
-                child: Text('No se pudieron cargar las compras.'),
+              loading: () => const LoadingView(),
+              error: (error, stackTrace) => ErrorState(
+                mensaje: 'No se pudieron cargar las compras.',
+                error: error,
+                stackTrace: stackTrace,
+                onReintentar: () => ref.invalidate(comprasProvider),
               ),
               data: (compras) {
                 if (compras.isEmpty) {
-                  return const Center(
-                    child: Text('No hay compras registradas.'),
-                  );
+                  return filtro.activo
+                      ? EmptyState(
+                          icono: Icons.filter_alt_off_outlined,
+                          titulo: 'Sin resultados para este filtro',
+                          descripcion:
+                              'No hay compras de ese proveedor en ese período.',
+                          accionLabel: 'Quitar filtros',
+                          onAccion: () => ref
+                              .read(comprasFiltroProvider.notifier)
+                              .actualizar((_) => const ComprasFiltro()),
+                        )
+                      : EmptyState(
+                          icono: Icons.shopping_cart_outlined,
+                          titulo: 'Aún no hay compras',
+                          descripcion:
+                              'Registra lo que compras a tus proveedores y el '
+                              'inventario se repone solo.',
+                          accionLabel: 'Nueva compra',
+                          onAccion: () => context.push(AppRoutes.comprasNueva),
+                        );
                 }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    0,
-                    AppSpacing.md,
-                    AppSpacing.xl,
-                  ),
-                  itemCount: compras.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (context, i) => _CompraTile(compra: compras[i]),
-                );
+                return _ListaCompras(compras: compras);
               },
             ),
           ),
@@ -61,43 +77,82 @@ class PurchasesListScreen extends ConsumerWidget {
   }
 }
 
+Money _totalVigente(Iterable<Compra> compras) => compras
+    .where((c) => c.estado == EstadoCompra.completada)
+    .fold(Money.zero, (suma, c) => suma + c.total);
+
+class _ListaCompras extends StatelessWidget {
+  const _ListaCompras({required this.compras});
+
+  final List<Compra> compras;
+
+  @override
+  Widget build(BuildContext context) {
+    final grupos = agruparPorDia(compras, (c) => c.fecha, DateTime.now());
+    final filas = <Widget>[
+      for (final grupo in grupos) ...[
+        EncabezadoDia(
+          titulo: grupo.etiqueta,
+          total: _totalVigente(grupo.elementos),
+          etiquetaTotal: 'Comprado',
+        ),
+        for (final compra in grupo.elementos)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: _CompraTile(compra: compra),
+          ),
+      ],
+    ];
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        0,
+        AppSpacing.md,
+        AppSpacing.xl + 56,
+      ),
+      itemCount: filas.length,
+      itemBuilder: (context, i) => filas[i],
+    );
+  }
+}
+
 class _ComprasFiltroBar extends ConsumerWidget {
   const _ComprasFiltroBar();
 
-  Future<void> _elegirRango(BuildContext context, WidgetRef ref) async {
+  Future<void> _elegirRango(
+    BuildContext context,
+    WidgetRef ref,
+    RangoFecha rango,
+  ) async {
+    final controlador = ref.read(comprasFiltroProvider.notifier);
+    if (rango != RangoFecha.personalizado) {
+      controlador.actualizar(
+        (f) => f.copyWith(rango: rango, desde: null, hasta: null),
+      );
+      return;
+    }
     final filtro = ref.read(comprasFiltroProvider);
-    final ahora = DateTime.now();
-    final rango = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(ahora.year - 5),
-      lastDate: ahora,
-      initialDateRange: filtro.desde != null && filtro.hasta != null
-          ? DateTimeRange(start: filtro.desde!, end: filtro.hasta!)
-          : null,
+    final elegido = await elegirRangoDeFechas(
+      context,
+      desde: filtro.desde,
+      hasta: filtro.hasta,
     );
-    if (rango == null) return;
-    ref
-        .read(comprasFiltroProvider.notifier)
-        .actualizar(
-          (f) => f.copyWith(
-            desde: rango.start,
-            hasta: DateTime(
-              rango.end.year,
-              rango.end.month,
-              rango.end.day,
-              23,
-              59,
-              59,
-            ),
-          ),
-        );
+    if (elegido == null) return;
+    final limites = limitesDeDias(elegido.start, elegido.end);
+    controlador.actualizar(
+      (f) => f.copyWith(
+        rango: RangoFecha.personalizado,
+        desde: limites.desde,
+        hasta: limites.hasta,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filtro = ref.watch(comprasFiltroProvider);
     final proveedoresAsync = ref.watch(proveedoresProvider);
-    final formatoFecha = DateFormat('dd/MM/yyyy');
+    final formatoDia = DateFormat('dd/MM');
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -106,50 +161,41 @@ class _ComprasFiltroBar extends ConsumerWidget {
         AppSpacing.md,
         AppSpacing.sm,
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: proveedoresAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
-              data: (proveedores) => DropdownButtonFormField<String?>(
-                initialValue: filtro.proveedorId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Proveedor'),
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('Todos los proveedores'),
+          proveedoresAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+            data: (proveedores) => DropdownButtonFormField<String?>(
+              initialValue: filtro.proveedorId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Proveedor'),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Todos los proveedores'),
+                ),
+                for (final proveedor in proveedores)
+                  DropdownMenuItem(
+                    value: proveedor.id,
+                    child: Text(proveedor.nombre),
                   ),
-                  for (final proveedor in proveedores)
-                    DropdownMenuItem(
-                      value: proveedor.id,
-                      child: Text(proveedor.nombre),
-                    ),
-                ],
-                onChanged: (valor) => ref
-                    .read(comprasFiltroProvider.notifier)
-                    .actualizar((f) => f.copyWith(proveedorId: valor)),
-              ),
+              ],
+              onChanged: (valor) => ref
+                  .read(comprasFiltroProvider.notifier)
+                  .actualizar((f) => f.copyWith(proveedorId: valor)),
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          if (filtro.desde != null && filtro.hasta != null)
-            InputChip(
-              label: Text(
-                '${formatoFecha.format(filtro.desde!)} - '
-                '${formatoFecha.format(filtro.hasta!)}',
-              ),
-              onDeleted: () => ref
-                  .read(comprasFiltroProvider.notifier)
-                  .actualizar((f) => f.copyWith(desde: null, hasta: null)),
-            )
-          else
-            IconButton(
-              tooltip: 'Filtrar por fecha',
-              icon: const Icon(Icons.date_range_outlined),
-              onPressed: () => _elegirRango(context, ref),
-            ),
+          const SizedBox(height: AppSpacing.sm),
+          FiltroFechaChip(
+            rango: filtro.rango,
+            textoPersonalizado: filtro.desde != null && filtro.hasta != null
+                ? '${formatoDia.format(filtro.desde!.toLocal())} - '
+                      '${formatoDia.format(filtro.hasta!.toLocal())}'
+                : null,
+            onElegir: (rango) => _elegirRango(context, ref, rango),
+          ),
         ],
       ),
     );
@@ -164,34 +210,72 @@ class _CompraTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
+    final textTheme = Theme.of(context).textTheme;
     final anulada = compra.estado == EstadoCompra.anulada;
+    final detalle = [
+      DateFormat('HH:mm').format(compra.fecha.toLocal()),
+      if (compra.numeroFactura != null) 'Factura ${compra.numeroFactura}',
+      if (compra.pagadaDeCaja) 'Pagada de caja',
+    ].join(' · ');
 
     return Card(
-      child: ListTile(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () => context.push('/compras/${compra.id}'),
-        leading: CircleAvatar(
-          backgroundColor: anulada
-              ? scheme.errorContainer
-              : scheme.primaryContainer,
-          child: Icon(
-            Icons.shopping_cart_outlined,
-            color: anulada
-                ? scheme.onErrorContainer
-                : scheme.onPrimaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm + 2,
           ),
-        ),
-        title: Text(compra.proveedorNombre ?? 'Sin proveedor'),
-        subtitle: Text(
-          '${formatoFecha.format(compra.fecha.toLocal())}'
-          '${compra.numeroFactura != null ? ' · Factura ${compra.numeroFactura}' : ''}'
-          '${anulada ? ' · ANULADA' : ''}',
-        ),
-        trailing: Text(
-          compra.total.format(),
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          child: Row(
+            children: [
+              Icon(
+                Icons.shopping_cart_outlined,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      compra.proveedorNombre ?? 'Sin proveedor',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleSmall,
+                    ),
+                    Text(
+                      detalle,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 130),
+                    child: MoneyText(
+                      compra.total,
+                      textAlign: TextAlign.right,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: anulada ? scheme.onSurfaceVariant : null,
+                        decoration: anulada ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                  ),
+                  if (anulada) const EtiquetaAnulada(),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

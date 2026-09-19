@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/app_database.dart' hide Venta, VentaItem;
 import '../../../../core/errors/result.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/utils/rango_fecha.dart';
 import '../../../settings/data/datasources/settings_local_datasource.dart';
 import '../../data/datasources/sales_local_datasource.dart';
 import '../../data/repositories/sales_repository_impl.dart';
@@ -18,19 +19,34 @@ final salesRepositoryProvider = Provider<SalesRepository>((ref) {
 });
 
 /// Filtros activos de la lista de ventas.
+///
+/// [rango] es el período elegido; [desde]/[hasta] solo cuentan con
+/// [RangoFecha.personalizado] (los demás rangos se calculan al consultar, así
+/// "Hoy" sigue siendo hoy aunque la app pase la medianoche abierta).
 class VentasFiltro {
-  const VentasFiltro({this.estado, this.desde, this.hasta});
+  const VentasFiltro({
+    this.estado,
+    this.rango = RangoFecha.todo,
+    this.desde,
+    this.hasta,
+  });
 
   final EstadoVenta? estado;
+  final RangoFecha rango;
   final DateTime? desde;
   final DateTime? hasta;
 
+  /// `true` si hay algún filtro activo (estado o fecha).
+  bool get activo => estado != null || rango != RangoFecha.todo;
+
   VentasFiltro copyWith({
     Object? estado = _sinCambio,
+    RangoFecha? rango,
     Object? desde = _sinCambio,
     Object? hasta = _sinCambio,
   }) {
     return VentasFiltro(
+      rango: rango ?? this.rango,
       estado: estado == _sinCambio ? this.estado : estado as EstadoVenta?,
       desde: desde == _sinCambio ? this.desde : desde as DateTime?,
       hasta: hasta == _sinCambio ? this.hasta : hasta as DateTime?,
@@ -56,12 +72,18 @@ class VentasFiltroController extends Notifier<VentasFiltro> {
 
 final ventasProvider = StreamProvider<List<Venta>>((ref) {
   final filtro = ref.watch(ventasFiltroProvider);
+  final limites = limitesDeRango(
+    filtro.rango,
+    DateTime.now(),
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+  );
   return ref
       .watch(salesRepositoryProvider)
       .watchVentas(
         estado: filtro.estado,
-        desde: filtro.desde,
-        hasta: filtro.hasta,
+        desde: limites.desde,
+        hasta: limites.hasta,
       );
 });
 

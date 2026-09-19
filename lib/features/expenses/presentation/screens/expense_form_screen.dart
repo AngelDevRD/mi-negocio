@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../cash_register/presentation/providers/cash_register_providers.dart';
 import '../../domain/entities/gasto.dart';
@@ -32,7 +33,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   DateTime _fecha = DateTime.now();
   bool _saleDeCaja = false;
   bool _guardando = false;
-  String? _error;
 
   @override
   void dispose() {
@@ -55,6 +55,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!_formKey.currentState!.validate()) return;
 
     final usuario = ref.read(authControllerProvider).value;
@@ -63,7 +64,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       _ => null,
     };
     if (usuarioId == null) {
-      setState(() => _error = 'No hay una sesión activa.');
+      AppSnackbar.error(context, 'No hay una sesión activa.');
       return;
     }
 
@@ -71,10 +72,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         ? _categoriaPersonalizadaController.text.trim()
         : _categoria;
 
-    setState(() {
-      _guardando = true;
-      _error = null;
-    });
+    setState(() => _guardando = true);
 
     final resultado = await ref
         .read(expensesRepositoryProvider)
@@ -90,7 +88,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     setState(() => _guardando = false);
     resultado.when(
       ok: (_) => Navigator.of(context).pop(),
-      fail: (f) => setState(() => _error = f.message),
+      fail: (f) => AppSnackbar.error(context, f.message),
     );
   }
 
@@ -125,6 +123,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               const SizedBox(height: AppSpacing.sm),
               TextFormField(
                 controller: _categoriaPersonalizadaController,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'Nombre de la categoría',
                 ),
@@ -138,6 +137,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             const SizedBox(height: AppSpacing.sm),
             TextFormField(
               controller: _conceptoController,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Concepto'),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Obligatorio';
@@ -147,6 +147,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             const SizedBox(height: AppSpacing.sm),
             TextFormField(
               controller: _montoController,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _guardar(),
               decoration: const InputDecoration(
                 labelText: 'Monto',
                 prefixText: 'RD\$ ',
@@ -189,15 +191,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   ? (valor) => setState(() => _saleDeCaja = valor)
                   : null,
             ),
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
             const SizedBox(height: AppSpacing.lg),
             FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
               onPressed: _guardando ? null : _guardar,
               child: _guardando
                   ? const SizedBox(

@@ -344,7 +344,9 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   await vender([item(arroz, 5), item(habichuelas, 3)]);
   await vender([item(refresco, 2), item(pan, 4)]);
   await vender([item(salami, 1.5), item(huevos, 12)], tipo: TipoVenta.detallada);
-  await vender([item(cerveza, 6)], nota: 'Pedido para fiesta');
+  // Una venta anulada (sale con su etiqueta en el historial).
+  final fiesta = await vender([item(cerveza, 6)], nota: 'Pedido para fiesta');
+  await ventas.anularVenta(fiesta, usuarioId: usuarioId);
 
   // Ventas de días anteriores: el repositorio siempre guarda "ahora", así que
   // se retrocede la fecha después de registrarlas.
@@ -461,7 +463,7 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
     pagadaDeCaja: false,
     usuarioId: usuarioId,
   );
-  await compras.registrarCompra(
+  final compraAyer = (await compras.registrarCompra(
     proveedorId: proveedor.id,
     items: [
       ItemCompraInput(
@@ -473,23 +475,38 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
     ],
     pagadaDeCaja: false,
     usuarioId: usuarioId,
+  )).valueOrNull!;
+  // Esta compra queda de ayer y anulada (el repositorio aún no ofrece anular
+  // compras): así la lista muestra dos días y la etiqueta "Anulada".
+  await (db.update(db.compras)..where((t) => t.id.equals(compraAyer))).write(
+    ComprasCompanion(
+      fecha: Value(ahora.subtract(const Duration(days: 1)).toUtc()),
+      estado: const Value(EstadoCompra.anulada),
+    ),
   );
 
   // Gastos del mes.
-  Future<void> gasto(String categoria, String concepto, double monto) async {
+  Future<void> gasto(
+    String categoria,
+    String concepto,
+    double monto, {
+    bool deCaja = false,
+  }) async {
     await gastos.registrarGasto(
       categoria: categoria,
       concepto: concepto,
       fecha: DateTime.now().toUtc(),
       monto: Money.fromPesos(monto),
-      saleDeCaja: false,
+      saleDeCaja: deCaja,
       usuarioId: usuarioId,
     );
   }
 
-  await gasto('Servicios', 'Factura de luz', 3850);
+  await gasto('Luz', 'Factura de luz', 3850);
   await gasto('Transporte', 'Flete de mercancía', 950);
-  await gasto('Mantenimiento', 'Reparación de nevera', 1800);
+  await gasto('Alquiler', 'Local de la esquina', 1800);
+  await gasto('Agua', 'Botellones de agua', 250, deCaja: true);
+  await gasto('Otros', 'Reparación de nevera', 1200);
 }
 
 // ---------------------------------------------------------------------------

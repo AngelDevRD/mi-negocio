@@ -1385,7 +1385,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Nueva venta'));
+      // El FAB (con la lista vacía el estado vacío también ofrece "Nueva venta").
+      await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
       expect(find.byType(PosScreen), findsOneWidget);

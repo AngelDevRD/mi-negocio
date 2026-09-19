@@ -9,7 +9,9 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../products/domain/entities/producto.dart';
 import '../../../products/presentation/providers/products_providers.dart';
@@ -29,6 +31,9 @@ class _PurchaseFormScreenState extends ConsumerState<PurchaseFormScreen> {
   final _numeroFacturaController = TextEditingController();
   bool _guardando = false;
 
+  /// `true` una vez guardada la compra: la salida ya no pide confirmación.
+  bool _salidaLibre = false;
+
   @override
   void dispose() {
     _numeroFacturaController.dispose();
@@ -37,12 +42,31 @@ class _PurchaseFormScreenState extends ConsumerState<PurchaseFormScreen> {
 
   void _mostrarError(String mensaje) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Theme.of(context).colorScheme.error,
-      ),
+    AppSnackbar.error(context, mensaje);
+  }
+
+  /// Hay datos escritos que se perderían al salir (el borrador vive en
+  /// `nuevaCompraProvider`, así que cualquier campo distinto del inicial cuenta).
+  bool _hayCambios(NuevaCompraState estado) =>
+      estado.items.isNotEmpty ||
+      estado.proveedorId != null ||
+      estado.numeroFactura != null ||
+      estado.fotoFacturaPath != null ||
+      estado.pagadaDeCaja;
+
+  Future<void> _confirmarSalida() async {
+    final descartar = await mostrarConfirmacion(
+      context,
+      titulo: '¿Descartar compra?',
+      mensaje: 'Tienes datos sin guardar. Si sales ahora, se pierden.',
+      confirmarLabel: 'Descartar',
+      cancelarLabel: 'Seguir editando',
+      destructivo: true,
     );
+    if (!descartar || !mounted) return;
+    ref.read(nuevaCompraProvider.notifier).limpiar();
+    setState(() => _salidaLibre = true);
+    context.pop();
   }
 
   Future<String> _guardarFoto(XFile archivo) async {
@@ -97,6 +121,7 @@ class _PurchaseFormScreenState extends ConsumerState<PurchaseFormScreen> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     final estado = ref.read(nuevaCompraProvider);
     if (estado.items.isEmpty) {
       _mostrarError('Agrega al menos un producto a la compra.');
@@ -122,6 +147,7 @@ class _PurchaseFormScreenState extends ConsumerState<PurchaseFormScreen> {
     resultado.when(
       ok: (_) {
         ref.read(nuevaCompraProvider.notifier).limpiar();
+        setState(() => _salidaLibre = true);
         context.pop();
       },
       fail: (f) => _mostrarError(f.message),
@@ -136,131 +162,178 @@ class _PurchaseFormScreenState extends ConsumerState<PurchaseFormScreen> {
       _numeroFacturaController.text = estado.numeroFactura ?? '';
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Nueva compra')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        children: [
-          proveedoresAsync.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (_, _) => const Text('No se pudieron cargar proveedores.'),
-            data: (proveedores) => Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return PopScope(
+      canPop: _salidaLibre || !_hayCambios(estado),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmarSalida();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Nueva compra')),
+        // Total y acción siempre a la vista, aunque la lista de productos crezca.
+        bottomNavigationBar: SafeArea(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Total',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: MoneyText(
+                          estado.total,
+                          textAlign: TextAlign.right,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: _guardando ? null : _guardar,
+                    child: _guardando
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Guardar compra'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: [
+            proveedoresAsync.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (error, stackTrace) => ErrorState(
+                compacto: true,
+                mensaje: 'No se pudieron cargar los proveedores.',
+                error: error,
+                stackTrace: stackTrace,
+                onReintentar: () => ref.invalidate(proveedoresProvider),
+              ),
+              data: (proveedores) => Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: estado.proveedorId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Proveedor (opcional)',
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('Sin proveedor'),
+                        ),
+                        for (final proveedor in proveedores)
+                          DropdownMenuItem(
+                            value: proveedor.id,
+                            child: Text(proveedor.nombre),
+                          ),
+                      ],
+                      onChanged: (valor) => ref
+                          .read(nuevaCompraProvider.notifier)
+                          .seleccionarProveedor(valor),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Nuevo proveedor',
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: _agregarProveedor,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextFormField(
+              controller: _numeroFacturaController,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Número de factura (opcional)',
+              ),
+              onChanged: (valor) => ref
+                  .read(nuevaCompraProvider.notifier)
+                  .establecerNumeroFactura(valor.trim().isEmpty ? null : valor),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _FotoFacturaPicker(
+              rutaFoto: estado.fotoFacturaPath,
+              onTomarFoto: () => _elegirFoto(ImageSource.camera),
+              onElegirGaleria: () => _elegirFoto(ImageSource.gallery),
+              onQuitar: () => ref
+                  .read(nuevaCompraProvider.notifier)
+                  .establecerFotoFactura(null),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Pagada de caja'),
+              subtitle: const Text(
+                'Registra una salida en la caja abierta por el total de la compra.',
+              ),
+              value: estado.pagadaDeCaja,
+              onChanged: (valor) => ref
+                  .read(nuevaCompraProvider.notifier)
+                  .establecerPagadaDeCaja(valor),
+            ),
+            const Divider(),
+            Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: estado.proveedorId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Proveedor (opcional)',
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Sin proveedor'),
-                      ),
-                      for (final proveedor in proveedores)
-                        DropdownMenuItem(
-                          value: proveedor.id,
-                          child: Text(proveedor.nombre),
-                        ),
-                    ],
-                    onChanged: (valor) => ref
-                        .read(nuevaCompraProvider.notifier)
-                        .seleccionarProveedor(valor),
+                  child: Text(
+                    'Productos',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Nuevo proveedor',
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: _agregarProveedor,
+                TextButton.icon(
+                  onPressed: _agregarItem,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar producto'),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          TextFormField(
-            controller: _numeroFacturaController,
-            decoration: const InputDecoration(
-              labelText: 'Número de factura (opcional)',
-            ),
-            onChanged: (valor) => ref
-                .read(nuevaCompraProvider.notifier)
-                .establecerNumeroFactura(valor.trim().isEmpty ? null : valor),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _FotoFacturaPicker(
-            rutaFoto: estado.fotoFacturaPath,
-            onTomarFoto: () => _elegirFoto(ImageSource.camera),
-            onElegirGaleria: () => _elegirFoto(ImageSource.gallery),
-            onQuitar: () => ref
-                .read(nuevaCompraProvider.notifier)
-                .establecerFotoFactura(null),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Pagada de caja'),
-            subtitle: const Text(
-              'Registra una salida en la caja abierta por el total de la compra.',
-            ),
-            value: estado.pagadaDeCaja,
-            onChanged: (valor) => ref
-                .read(nuevaCompraProvider.notifier)
-                .establecerPagadaDeCaja(valor),
-          ),
-          const Divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Productos', style: Theme.of(context).textTheme.titleMedium),
-              TextButton.icon(
-                onPressed: _agregarItem,
-                icon: const Icon(Icons.add),
-                label: const Text('Agregar producto'),
-              ),
-            ],
-          ),
-          if (estado.items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-              child: Text('Aún no has agregado productos.'),
-            )
-          else
-            for (var i = 0; i < estado.items.length; i++)
-              _ItemTile(
-                item: estado.items[i],
-                onQuitar: () =>
-                    ref.read(nuevaCompraProvider.notifier).quitarItem(i),
-              ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Total', style: Theme.of(context).textTheme.titleLarge),
-                Text(
-                  estado.total.format(),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            if (estado.items.isEmpty)
+              const EmptyState(
+                compacto: true,
+                icono: Icons.shopping_cart_outlined,
+                titulo: 'Aún no has agregado productos',
+                descripcion: 'Agrega lo que compraste para poder guardar.',
+              )
+            else
+              for (var i = 0; i < estado.items.length; i++)
+                _ItemTile(
+                  item: estado.items[i],
+                  onQuitar: () =>
+                      ref.read(nuevaCompraProvider.notifier).quitarItem(i),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          FilledButton(
-            onPressed: _guardando ? null : _guardar,
-            child: _guardando
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Guardar compra'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -302,6 +375,7 @@ class _FotoFacturaPicker extends StatelessWidget {
                 top: 4,
                 right: 4,
                 child: IconButton.filledTonal(
+                  tooltip: 'Quitar foto',
                   onPressed: onQuitar,
                   icon: const Icon(Icons.close),
                 ),
@@ -344,19 +418,28 @@ class _ItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: ListTile(
         title: Text(item.productoNombre),
-        subtitle: Text(
-          '${item.cantidad.toStringAsFixed(2)} x ${item.costoUnitario.format()}',
+        subtitle: Row(
+          children: [
+            Text('${formatoCantidad(item.cantidad)} × '),
+            Flexible(child: MoneyText(item.costoUnitario)),
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              item.subtotal.format(),
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 110),
+              child: MoneyText(
+                item.subtotal,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             IconButton(
+              tooltip: 'Quitar producto',
               icon: const Icon(Icons.delete_outline),
               onPressed: onQuitar,
             ),
@@ -386,6 +469,16 @@ class _NuevoProveedorDialogState extends State<_NuevoProveedorDialog> {
     super.dispose();
   }
 
+  void _crear() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop((
+      nombre: _nombreController.text,
+      telefono: _telefonoController.text.trim().isEmpty
+          ? null
+          : _telefonoController.text.trim(),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -398,6 +491,7 @@ class _NuevoProveedorDialogState extends State<_NuevoProveedorDialog> {
             TextFormField(
               controller: _nombreController,
               autofocus: true,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Nombre'),
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
@@ -405,6 +499,8 @@ class _NuevoProveedorDialogState extends State<_NuevoProveedorDialog> {
             const SizedBox(height: AppSpacing.sm),
             TextFormField(
               controller: _telefonoController,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _crear(),
               decoration: const InputDecoration(
                 labelText: 'Teléfono (opcional)',
               ),
@@ -418,18 +514,7 @@ class _NuevoProveedorDialogState extends State<_NuevoProveedorDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-            Navigator.of(context).pop((
-              nombre: _nombreController.text,
-              telefono: _telefonoController.text.trim().isEmpty
-                  ? null
-                  : _telefonoController.text.trim(),
-            ));
-          },
-          child: const Text('Crear'),
-        ),
+        FilledButton(onPressed: _crear, child: const Text('Crear')),
       ],
     );
   }
@@ -474,9 +559,21 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
 
   String? _validarCosto(String? valor) {
     if (valor == null || valor.trim().isEmpty) return 'Obligatorio';
-    final parsed = double.tryParse(valor.replaceAll(',', ''));
-    if (parsed == null || parsed < 0) return 'Costo inválido';
+    final costo = Money.tryParse(valor);
+    if (costo == null || costo.isNegative) return 'Costo inválido';
     return null;
+  }
+
+  void _agregar() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(
+      ItemCompraInput(
+        productoId: _seleccionado!.id,
+        productoNombre: _seleccionado!.nombre,
+        cantidad: double.parse(_cantidadController.text),
+        costoUnitario: Money.parse(_costoController.text),
+      ),
+    );
   }
 
   @override
@@ -508,13 +605,22 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
                 SizedBox(
                   height: 240,
                   child: productosAsync.when(
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (_, _) =>
-                        const Center(child: Text('No se pudieron cargar.')),
+                    loading: () => const LoadingView(),
+                    error: (error, stackTrace) => ErrorState(
+                      compacto: true,
+                      mensaje: 'No se pudieron cargar los productos.',
+                      error: error,
+                      stackTrace: stackTrace,
+                      onReintentar: () =>
+                          ref.invalidate(productosParaSeleccionProvider),
+                    ),
                     data: (productos) {
                       if (productos.isEmpty) {
-                        return const Center(child: Text('Sin resultados.'));
+                        return const EmptyState(
+                          compacto: true,
+                          icono: Icons.search_off_outlined,
+                          titulo: 'Sin resultados',
+                        );
                       }
                       return ListView.builder(
                         itemCount: productos.length,
@@ -522,8 +628,11 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
                           final producto = productos[i];
                           return ListTile(
                             title: Text(producto.nombre),
-                            subtitle: Text(
-                              'Costo actual: ${producto.precioCompra.format()}',
+                            subtitle: Row(
+                              children: [
+                                const Text('Costo actual: '),
+                                MoneyText(producto.precioCompra),
+                              ],
                             ),
                             onTap: () => _seleccionar(producto),
                           );
@@ -543,6 +652,7 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
                 ),
                 TextFormField(
                   controller: _cantidadController,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     labelText: 'Cantidad (${_seleccionado!.unidad})',
                   ),
@@ -557,6 +667,8 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _costoController,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _agregar(),
                   decoration: const InputDecoration(
                     labelText: 'Costo unitario',
                     prefixText: 'RD\$ ',
@@ -580,20 +692,7 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
           child: const Text('Cancelar'),
         ),
         if (_seleccionado != null)
-          FilledButton(
-            onPressed: () {
-              if (!_formKey.currentState!.validate()) return;
-              Navigator.of(context).pop(
-                ItemCompraInput(
-                  productoId: _seleccionado!.id,
-                  productoNombre: _seleccionado!.nombre,
-                  cantidad: double.parse(_cantidadController.text),
-                  costoUnitario: Money.parse(_costoController.text),
-                ),
-              );
-            },
-            child: const Text('Agregar'),
-          ),
+          FilledButton(onPressed: _agregar, child: const Text('Agregar')),
       ],
     );
   }
