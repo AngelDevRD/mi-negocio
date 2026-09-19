@@ -74,6 +74,8 @@ Venta _venta(
   TipoVenta tipo = TipoVenta.rapida,
   String usuario = 'Luis',
   String? nota,
+  MetodoPago? metodo,
+  bool mixto = false,
 }) => Venta(
   id: id,
   tipo: tipo,
@@ -83,6 +85,8 @@ Venta _venta(
   nota: nota,
   usuarioNombre: usuario,
   fecha: fecha.toUtc(),
+  metodoPago: metodo,
+  pagoMixto: mixto,
 );
 
 Future<void> _montar(
@@ -209,6 +213,39 @@ void main() {
       expect(anulada.style?.decoration, TextDecoration.lineThrough);
       final normal = tester.widget<Text>(find.text('RD\$ 300.00').last);
       expect(normal.style?.decoration, isNot(TextDecoration.lineThrough));
+    });
+  });
+
+  group('método de pago', () {
+    testWidgets('cada fila lo muestra con ícono + texto', (tester) async {
+      await _montar(
+        tester,
+        RepoVentasFalso([
+          _venta('a', 10000, _hoy(11), metodo: MetodoPago.efectivo),
+          _venta('b', 20000, _hoy(10), metodo: MetodoPago.tarjeta),
+          _venta('c', 30000, _hoy(9), metodo: MetodoPago.transferencia),
+          _venta('d', 40000, _hoy(8), metodo: MetodoPago.credito),
+          _venta('e', 50000, _hoy(7), mixto: true),
+        ]),
+      );
+
+      for (final (texto, icono) in [
+        ('Efectivo', Icons.payments_outlined),
+        ('Tarjeta', Icons.credit_card_outlined),
+        ('Transferencia', Icons.account_balance_outlined),
+        ('Fiado', Icons.menu_book_outlined),
+        ('Mixto', Icons.shuffle),
+      ]) {
+        expect(find.text(texto), findsOneWidget, reason: texto);
+        expect(find.byIcon(icono), findsOneWidget, reason: texto);
+      }
+    });
+
+    testWidgets('sin método en la entidad no se inventa uno', (tester) async {
+      await _montar(tester, RepoVentasFalso([_venta('a', 10000, _hoy(11))]));
+
+      expect(find.text('Efectivo'), findsNothing);
+      expect(find.byIcon(Icons.payments_outlined), findsNothing);
     });
   });
 

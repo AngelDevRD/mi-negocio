@@ -15,19 +15,22 @@ class PurchasesRepositoryImpl implements PurchasesRepository {
   Proveedor _proveedorAEntidad(db.Proveedore row) =>
       Proveedor(id: row.id, nombre: row.nombre, telefono: row.telefono);
 
-  CompraItem _itemAEntidad((db.CompraItem, String) row) {
-    final (item, productoNombre) = row;
+  CompraItem _itemAEntidad((db.CompraItem, String, String, double) row) {
+    final (item, productoNombre, unidad, stockActual) = row;
     return CompraItem(
       productoId: item.productoId,
       productoNombre: productoNombre,
       cantidad: item.cantidad,
       costoUnitario: Money(item.costoUnitario),
+      unidad: unidad,
+      stockActual: stockActual,
     );
   }
 
   Compra _compraAEntidad(
     (db.Compra, String?, String) row, {
     List<CompraItem> items = const [],
+    bool? cajaDelPagoAbierta,
   }) {
     final (compra, proveedorNombre, usuarioNombre) = row;
     return Compra(
@@ -42,6 +45,7 @@ class PurchasesRepositoryImpl implements PurchasesRepository {
       usuarioNombre: usuarioNombre,
       fecha: compra.fecha,
       items: items,
+      cajaDelPagoAbierta: cajaDelPagoAbierta,
     );
   }
 
@@ -94,7 +98,13 @@ class PurchasesRepositoryImpl implements PurchasesRepository {
     final fila = await _local.obtenerCompra(id);
     if (fila == null) return null;
     final items = await _local.obtenerItemsCompra(id);
-    return _compraAEntidad(fila, items: items.map(_itemAEntidad).toList());
+    return _compraAEntidad(
+      fila,
+      items: items.map(_itemAEntidad).toList(),
+      cajaDelPagoAbierta: fila.$1.pagadaDeCaja
+          ? await _local.cajaDelPagoAbierta(id)
+          : null,
+    );
   }
 
   @override
@@ -164,5 +174,31 @@ class PurchasesRepositoryImpl implements PurchasesRepository {
       usuarioId: usuarioId,
     );
     return Result.ok(compraId);
+  }
+
+  @override
+  Future<Result<ResultadoAnulacionCompra>> anularCompra(
+    String id, {
+    required String usuarioId,
+  }) async {
+    final r = await _local.anularCompra(id, usuarioId: usuarioId);
+    return switch (r.estado) {
+      EstadoAnulacionCompra.sinPermiso => const Result.fail(
+        PermissionFailure('Solo el administrador puede anular compras.'),
+      ),
+      EstadoAnulacionCompra.noExiste => const Result.fail(
+        ValidationFailure('La compra no existe.'),
+      ),
+      EstadoAnulacionCompra.yaAnulada => const Result.fail(
+        ValidationFailure('La compra ya está anulada.'),
+      ),
+      EstadoAnulacionCompra.aplicada => Result.ok(
+        ResultadoAnulacionCompra(
+          cajaYaCerrada: r.cajaYaCerrada,
+          costoRestaurado: r.costoRestaurado,
+          costoConservado: r.costoConservado,
+        ),
+      ),
+    };
   }
 }

@@ -8,7 +8,8 @@ import 'package:app_gestion/features/sales/data/datasources/sales_local_datasour
 import 'package:app_gestion/features/sales/data/repositories/sales_repository_impl.dart';
 import 'package:app_gestion/features/sales/domain/entities/venta.dart';
 import 'package:app_gestion/features/settings/data/datasources/settings_local_datasource.dart';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryInterceptor, Value;
 import 'package:drift/native.dart';
 
 /// Base en memoria con negocio, administrador y un producto (Salami, stock
@@ -27,8 +28,14 @@ class FiadoFixture {
   final SalesRepositoryImpl ventas;
   final CustomersRepositoryImpl clientes;
 
-  static Future<FiadoFixture> crear() async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory());
+  /// Con [interceptor] se observan las consultas que llegan a la base (p. ej.
+  /// para contarlas).
+  static Future<FiadoFixture> crear({QueryInterceptor? interceptor}) async {
+    final db = AppDatabase.forTesting(
+      interceptor == null
+          ? NativeDatabase.memory()
+          : NativeDatabase.memory().interceptWith(interceptor),
+    );
     final negocioId = generateUuidV4();
     await db
         .into(db.negocios)

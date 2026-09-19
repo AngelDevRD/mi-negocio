@@ -5,18 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/database/enums.dart';
+import '../../../../core/errors/result.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/cantidades.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/compra.dart';
 import '../providers/purchases_providers.dart';
 
 /// Detalle de una compra (RF-COM): proveedor, factura, fecha local, foto
-/// ampliable, productos con cantidad y costo, y el total.
-///
-/// Limitaciones de datos (se muestran como están, sin consultas extra):
-/// el ítem de compra no trae la unidad del producto (solo la cantidad) y el
-/// repositorio no ofrece anular una compra, así que no hay botón de anular.
+/// ampliable, productos con cantidad, unidad y costo, y el total. El
+/// Administrador puede anularla (RN-10) si está completada.
 class PurchaseDetailScreen extends ConsumerWidget {
   const PurchaseDetailScreen({super.key, required this.compraId});
 
@@ -50,16 +49,141 @@ class PurchaseDetailScreen extends ConsumerWidget {
   }
 }
 
-class _PurchaseDetail extends StatelessWidget {
+/// Texto de la confirmación de anular [compra]: dice lo que va a pasar con el
+/// stock (por producto, con su unidad y avisando de los que quedarían en
+/// negativo), con la caja y con el costo. Pública para poder probarla.
+String mensajeAnulacionCompra(Compra compra) {
+  final negativos = <String>[];
+  final lineas = StringBuffer(
+    'Se anulará esta compra de ${compra.total.format()}. Esto pasará:\n\n'
+    '• Stock: se descuenta lo que entró con la compra.\n',
+  );
+  for (final item in compra.items) {
+    final quedaria = item.stockActual - item.cantidad;
+    lineas.writeln(
+      '   – ${item.productoNombre}: '
+      '-${formatoCantidadUnidad(item.cantidad, item.unidad)} '
+      '(hay ${formatoCantidadUnidad(item.stockActual, item.unidad)}, '
+      'quedaría ${formatoCantidadUnidad(quedaria, item.unidad)})',
+    );
+    if (quedaria < 0) negativos.add(item.productoNombre);
+  }
+  if (negativos.isNotEmpty) {
+    lineas.writeln(
+      '\n⚠ Quedaría con stock NEGATIVO: ${negativos.join(', ')}. '
+      'Ya se vendió parte de lo que entró; revisa el inventario después.',
+    );
+  }
+  lineas.writeln();
+  lineas.writeln(switch (compra.cajaDelPagoAbierta) {
+    _ when !compra.pagadaDeCaja =>
+      '• Caja: no cambia (la compra no se pagó de caja).',
+    true => '• Caja: se devuelven ${compra.total.format()} a la caja abierta.',
+    false =>
+      '• Caja: la caja de esta compra ya se cerró, así que NO se registra '
+          'ningún movimiento. Si el proveedor te devolvió dinero, regístralo '
+          'como una entrada de efectivo.',
+    null =>
+      '• Caja: no se encontró el pago de caja de esta compra; no se '
+          'registra ningún movimiento.',
+  });
+  lineas.writeln(
+    '• Costo: si esta compra cambió el costo de un producto y nadie lo cambió '
+    'después, vuelve al costo anterior.',
+  );
+  lineas.write('\nEsta acción no se puede deshacer.');
+  return lineas.toString();
+}
+
+class _PurchaseDetail extends ConsumerStatefulWidget {
   const _PurchaseDetail({required this.compra});
 
   final Compra compra;
 
   @override
+  ConsumerState<_PurchaseDetail> createState() => _PurchaseDetailState();
+}
+
+class _PurchaseDetailState extends ConsumerState<_PurchaseDetail> {
+  bool _procesando = false;
+
+  Future<void> _anular() async {
+    // El guard va ANTES del diálogo: dos toques seguidos no abren dos.
+    if (_procesando) return;
+    _procesando = true;
+    final compra = widget.compra;
+
+    final confirmada = await mostrarConfirmacion(
+      context,
+      titulo: '¿Anular esta compra?',
+      mensaje: mensajeAnulacionCompra(compra),
+      confirmarLabel: 'Anular compra',
+      destructivo: true,
+    );
+    if (!mounted) return;
+    if (!confirmada) {
+      setState(() => _procesando = false);
+      return;
+    }
+    final usuarioId = switch (ref.read(authControllerProvider).value) {
+      SesionActiva(:final usuario) => usuario.id,
+      _ => null,
+    };
+    if (usuarioId == null) {
+      setState(() => _procesando = false);
+      AppSnackbar.error(context, 'No hay una sesión activa.');
+      return;
+    }
+
+    setState(() {});
+    final resultado = await ref
+        .read(purchasesRepositoryProvider)
+        .anularCompra(compra.id, usuarioId: usuarioId);
+    if (!mounted) return;
+    setState(() => _procesando = false);
+    switch (resultado) {
+      case Fail(:final failure):
+        AppSnackbar.error(context, failure.message);
+      case Ok(:final value):
+        ref.invalidate(compraProvider(compra.id));
+        AppSnackbar.exito(context, 'Compra anulada.');
+        final avisos = [
+          if (value.cajaYaCerrada)
+            'La caja de esta compra ya se cerró. Si el proveedor te devolvió '
+                'dinero, regístralo como una entrada de efectivo.',
+          if (value.costoConservado.isNotEmpty)
+            'El costo de ${value.costoConservado.join(', ')} se dejó como '
+                'está porque cambió después de esta compra.',
+        ];
+        if (avisos.isNotEmpty) {
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              scrollable: true,
+              title: const Text('Compra anulada'),
+              content: Text(avisos.join('\n\n')),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Entendido'),
+                ),
+              ],
+            ),
+          );
+        }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final compra = widget.compra;
     final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
     final textTheme = Theme.of(context).textTheme;
     final anulada = compra.estado == EstadoCompra.anulada;
+    final esAdmin = switch (ref.watch(authControllerProvider).value) {
+      SesionActiva(:final usuario) => usuario.esAdministrador,
+      _ => false,
+    };
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -156,6 +280,20 @@ class _PurchaseDetail extends StatelessWidget {
             ],
           ),
         ),
+        // Anular: solo el Administrador y solo una compra completada (RN-10).
+        if (esAdmin && !anulada) ...[
+          const SizedBox(height: AppSpacing.md),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(color: Theme.of(context).colorScheme.error),
+            ),
+            onPressed: _procesando ? null : _anular,
+            icon: const Icon(Icons.block_outlined),
+            label: const Text('Anular compra'),
+          ),
+        ],
       ],
     );
   }
@@ -201,20 +339,19 @@ class _ItemTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(item.productoNombre, style: textTheme.titleSmall),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        '${formatoCantidad(item.cantidad)} × ',
+                        '${formatoCantidadUnidad(item.cantidad, item.unidad)} × ',
                         style: textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
-                      Flexible(
-                        child: MoneyText(
-                          item.costoUnitario,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      MoneyText(
+                        item.costoUnitario,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ],

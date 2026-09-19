@@ -31,6 +31,7 @@ class SalesRepositoryImpl implements SalesRepository {
     (db.Venta, String) row, {
     List<VentaItem> items = const [],
     MetodoPago? metodoPago,
+    bool pagoMixto = false,
     String? clienteNombre,
   }) {
     final (venta, usuarioNombre) = row;
@@ -45,6 +46,7 @@ class SalesRepositoryImpl implements SalesRepository {
       fecha: venta.fecha,
       items: items,
       metodoPago: metodoPago,
+      pagoMixto: pagoMixto,
       clienteNombre: clienteNombre,
     );
   }
@@ -57,7 +59,17 @@ class SalesRepositoryImpl implements SalesRepository {
   }) {
     return _local
         .watchVentas(estado: estado, desde: desde, hasta: hasta)
-        .map((rows) => rows.map((row) => _ventaAEntidad(row)).toList());
+        .map(
+          (rows) => rows
+              .map(
+                (row) => _ventaAEntidad(
+                  (row.$1, row.$2),
+                  metodoPago: row.$3,
+                  pagoMixto: row.$4,
+                ),
+              )
+              .toList(),
+        );
   }
 
   @override

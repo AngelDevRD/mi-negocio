@@ -187,15 +187,31 @@ class SalesLocalDatasource {
         .fold<int>(0, (suma, p) => suma + p.monto);
   }
 
-  /// Ventas con el nombre del usuario, más reciente primero.
-  Stream<List<(Venta, String)>> watchVentas({
+  /// Ventas con el nombre del usuario y su método de pago, más reciente
+  /// primero. El método sale de la MISMA consulta (un `left join` agregado con
+  /// `venta_pagos`, no una consulta por venta): sin filas de pago = efectivo
+  /// (regla de [pagosDeVenta]); con más de un método distinto, `mixto`.
+  Stream<List<(Venta, String, MetodoPago?, bool)>> watchVentas({
     EstadoVenta? estado,
     DateTime? desde,
     DateTime? hasta,
   }) {
-    final query = _db.select(_db.ventas).join([
-      innerJoin(_db.usuarios, _db.usuarios.id.equalsExp(_db.ventas.usuarioId)),
-    ])..orderBy([OrderingTerm.desc(_db.ventas.fecha)]);
+    final primerMetodo = _db.ventaPagos.metodo.min();
+    final ultimoMetodo = _db.ventaPagos.metodo.max();
+    final query =
+        _db.select(_db.ventas).join([
+            innerJoin(
+              _db.usuarios,
+              _db.usuarios.id.equalsExp(_db.ventas.usuarioId),
+            ),
+            leftOuterJoin(
+              _db.ventaPagos,
+              _db.ventaPagos.ventaId.equalsExp(_db.ventas.id),
+            ),
+          ])
+          ..addColumns([primerMetodo, ultimoMetodo])
+          ..groupBy([_db.ventas.id])
+          ..orderBy([OrderingTerm.desc(_db.ventas.fecha)]);
 
     if (estado != null) {
       query.where(_db.ventas.estado.equalsValue(estado));
@@ -208,12 +224,20 @@ class SalesLocalDatasource {
     }
 
     return query.watch().map(
-      (rows) => rows
-          .map(
-            (row) =>
-                (row.readTable(_db.ventas), row.readTable(_db.usuarios).nombre),
-          )
-          .toList(),
+      (rows) => rows.map((row) {
+        final primero = row.read(primerMetodo);
+        final mixto = primero != row.read(ultimoMetodo);
+        return (
+          row.readTable(_db.ventas),
+          row.readTable(_db.usuarios).nombre,
+          mixto
+              ? null
+              : (primero == null
+                    ? MetodoPago.efectivo
+                    : MetodoPago.values.byName(primero)),
+          mixto,
+        );
+      }).toList(),
     );
   }
 

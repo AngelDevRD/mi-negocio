@@ -38,4 +38,16 @@ abstract interface class PurchasesRepository {
     required bool pagadaDeCaja,
     required String usuarioId,
   });
+
+  /// Anula una compra (RF-COM/RN-10, SOLO Administrador) en UNA transacción:
+  /// descuenta el stock de cada ítem (movimiento `anulacionCompra`, aunque
+  /// quede negativo: es una corrección), restaura el costo anterior de los
+  /// productos cuyo costo cambió esta compra SI nadie lo cambió después,
+  /// compensa la salida de caja si la sesión de ese pago sigue abierta, marca
+  /// la compra como anulada y audita. La existencia y el estado se revalidan
+  /// dentro de la transacción (doble anulación concurrente = una sola).
+  Future<Result<ResultadoAnulacionCompra>> anularCompra(
+    String id, {
+    required String usuarioId,
+  });
 }

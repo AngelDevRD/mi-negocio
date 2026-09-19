@@ -20,6 +20,8 @@ Future<bool> mostrarConfirmacion(
   final resultado = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      // Con mensajes largos (p. ej. lo que pasa al anular) el contenido se desplaza.
+      scrollable: true,
       title: Text(titulo),
       content: Text(mensaje),
       actions: [

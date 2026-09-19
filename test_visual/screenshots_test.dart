@@ -58,7 +58,7 @@ void main() {
         await sesion.ir('/caja');
         await sesion.capturar('admin_caja');
 
-        // Salida manual de efectivo: motivo rÃ¡pido en chip.
+        // Salida manual de efectivo: motivo rápido en chip.
         await sesion.tocarTexto('Salida');
         await sesion.escribir('Monto', '150');
         await sesion.tocarTexto('Delivery');
@@ -121,7 +121,7 @@ void main() {
       cuerpo: (sesion) async {
         await sesion.capturar('caja_cerrada_inicio');
 
-        // PestaÃ±a Caja cerrada, historial y detalle de un cierre con su resumen.
+        // Pestaña Caja cerrada, historial y detalle de un cierre con su resumen.
         await sesion.ir('/caja');
         await sesion.capturar('caja_cerrada');
         await sesion.tocarTexto('Historial');
@@ -412,6 +412,9 @@ void main() {
         await sesion.capturar('admin_compras');
         await sesion.tocarTextoQueContiene('Factura F-1042');
         await sesion.capturar('admin_compra_detalle');
+        await sesion.tocarTexto('Anular compra');
+        await sesion.capturar('admin_compra_anular_dialogo');
+        await sesion.tocarTexto('Cancelar');
 
         // Formulario de compra: vacío y con un producto (total siempre visible).
         await sesion.ir('/compras/nueva', apilar: true);

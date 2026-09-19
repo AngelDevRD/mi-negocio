@@ -421,10 +421,13 @@ class _ItemTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: ListTile(
         title: Text(item.productoNombre),
-        subtitle: Row(
+        // Wrap (no Row): con texto grande la cantidad y el costo pasan a otra
+        // línea en vez de desbordar.
+        subtitle: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text('${formatoCantidad(item.cantidad)} × '),
-            Flexible(child: MoneyText(item.costoUnitario)),
+            Text('${formatoCantidadUnidad(item.cantidad, item.unidad)} × '),
+            MoneyText(item.costoUnitario),
           ],
         ),
         trailing: Row(
@@ -570,6 +573,7 @@ class _AgregarItemDialogState extends ConsumerState<_AgregarItemDialog> {
       ItemCompraInput(
         productoId: _seleccionado!.id,
         productoNombre: _seleccionado!.nombre,
+        unidad: _seleccionado!.unidad,
         cantidad: double.parse(_cantidadController.text),
         costoUnitario: Money.parse(_costoController.text),
       ),

@@ -39,11 +39,16 @@ abstract class Venta with _$Venta {
     required DateTime fecha,
     @Default([]) List<VentaItem> items,
 
-    /// Solo se carga en el detalle (`obtenerVenta`); `null` en las listas.
+    /// Método de pago: el detalle y la lista lo traen (la lista, en la misma
+    /// consulta). Una venta sin filas en `venta_pagos` cuenta como efectivo.
     MetodoPago? metodoPago,
 
     /// Cliente al que se le fió la venta (solo en el detalle, si fue a crédito).
     String? clienteNombre,
+
+    /// `true` si la venta se pagó con más de un método (entonces [metodoPago]
+    /// es `null`). Hoy cada venta tiene un solo pago; queda previsto.
+    @Default(false) bool pagoMixto,
   }) = _Venta;
 }
 

@@ -14,7 +14,11 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$CompraItem {
 
- String get productoId; String get productoNombre; double get cantidad; Money get costoUnitario;
+ String get productoId; String get productoNombre; double get cantidad; Money get costoUnitario;/// Unidad del producto ("libra", "unidad"...), de la misma consulta que
+/// trae el nombre.
+ String get unidad;/// Existencia ACTUAL del producto (no la de cuando se compró): sirve para
+/// avisar qué stock quedaría al anular la compra.
+ double get stockActual;
 /// Create a copy of CompraItem
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -25,16 +29,16 @@ $CompraItemCopyWith<CompraItem> get copyWith => _$CompraItemCopyWithImpl<CompraI
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CompraItem&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CompraItem&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario)&&(identical(other.unidad, unidad) || other.unidad == unidad)&&(identical(other.stockActual, stockActual) || other.stockActual == stockActual));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario);
+int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario,unidad,stockActual);
 
 @override
 String toString() {
-  return 'CompraItem(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario)';
+  return 'CompraItem(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario, unidad: $unidad, stockActual: $stockActual)';
 }
 
 
@@ -45,7 +49,7 @@ abstract mixin class $CompraItemCopyWith<$Res>  {
   factory $CompraItemCopyWith(CompraItem value, $Res Function(CompraItem) _then) = _$CompraItemCopyWithImpl;
 @useResult
 $Res call({
- String productoId, String productoNombre, double cantidad, Money costoUnitario
+ String productoId, String productoNombre, double cantidad, Money costoUnitario, String unidad, double stockActual
 });
 
 
@@ -62,13 +66,15 @@ class _$CompraItemCopyWithImpl<$Res>
 
 /// Create a copy of CompraItem
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,Object? unidad = null,Object? stockActual = null,}) {
   return _then(_self.copyWith(
 productoId: null == productoId ? _self.productoId : productoId // ignore: cast_nullable_to_non_nullable
 as String,productoNombre: null == productoNombre ? _self.productoNombre : productoNombre // ignore: cast_nullable_to_non_nullable
 as String,cantidad: null == cantidad ? _self.cantidad : cantidad // ignore: cast_nullable_to_non_nullable
 as double,costoUnitario: null == costoUnitario ? _self.costoUnitario : costoUnitario // ignore: cast_nullable_to_non_nullable
-as Money,
+as Money,unidad: null == unidad ? _self.unidad : unidad // ignore: cast_nullable_to_non_nullable
+as String,stockActual: null == stockActual ? _self.stockActual : stockActual // ignore: cast_nullable_to_non_nullable
+as double,
   ));
 }
 
@@ -153,10 +159,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad,  double stockActual)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _CompraItem() when $default != null:
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad,_that.stockActual);case _:
   return orElse();
 
 }
@@ -174,10 +180,10 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad,  double stockActual)  $default,) {final _that = this;
 switch (_that) {
 case _CompraItem():
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad,_that.stockActual);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -194,10 +200,10 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad,  double stockActual)?  $default,) {final _that = this;
 switch (_that) {
 case _CompraItem() when $default != null:
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad,_that.stockActual);case _:
   return null;
 
 }
@@ -209,13 +215,19 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 
 
 class _CompraItem extends CompraItem {
-  const _CompraItem({required this.productoId, required this.productoNombre, required this.cantidad, required this.costoUnitario}): super._();
+  const _CompraItem({required this.productoId, required this.productoNombre, required this.cantidad, required this.costoUnitario, this.unidad = 'unidad', this.stockActual = 0}): super._();
   
 
 @override final  String productoId;
 @override final  String productoNombre;
 @override final  double cantidad;
 @override final  Money costoUnitario;
+/// Unidad del producto ("libra", "unidad"...), de la misma consulta que
+/// trae el nombre.
+@override@JsonKey() final  String unidad;
+/// Existencia ACTUAL del producto (no la de cuando se compró): sirve para
+/// avisar qué stock quedaría al anular la compra.
+@override@JsonKey() final  double stockActual;
 
 /// Create a copy of CompraItem
 /// with the given fields replaced by the non-null parameter values.
@@ -227,16 +239,16 @@ _$CompraItemCopyWith<_CompraItem> get copyWith => __$CompraItemCopyWithImpl<_Com
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CompraItem&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CompraItem&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario)&&(identical(other.unidad, unidad) || other.unidad == unidad)&&(identical(other.stockActual, stockActual) || other.stockActual == stockActual));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario);
+int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario,unidad,stockActual);
 
 @override
 String toString() {
-  return 'CompraItem(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario)';
+  return 'CompraItem(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario, unidad: $unidad, stockActual: $stockActual)';
 }
 
 
@@ -247,7 +259,7 @@ abstract mixin class _$CompraItemCopyWith<$Res> implements $CompraItemCopyWith<$
   factory _$CompraItemCopyWith(_CompraItem value, $Res Function(_CompraItem) _then) = __$CompraItemCopyWithImpl;
 @override @useResult
 $Res call({
- String productoId, String productoNombre, double cantidad, Money costoUnitario
+ String productoId, String productoNombre, double cantidad, Money costoUnitario, String unidad, double stockActual
 });
 
 
@@ -264,13 +276,15 @@ class __$CompraItemCopyWithImpl<$Res>
 
 /// Create a copy of CompraItem
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,Object? unidad = null,Object? stockActual = null,}) {
   return _then(_CompraItem(
 productoId: null == productoId ? _self.productoId : productoId // ignore: cast_nullable_to_non_nullable
 as String,productoNombre: null == productoNombre ? _self.productoNombre : productoNombre // ignore: cast_nullable_to_non_nullable
 as String,cantidad: null == cantidad ? _self.cantidad : cantidad // ignore: cast_nullable_to_non_nullable
 as double,costoUnitario: null == costoUnitario ? _self.costoUnitario : costoUnitario // ignore: cast_nullable_to_non_nullable
-as Money,
+as Money,unidad: null == unidad ? _self.unidad : unidad // ignore: cast_nullable_to_non_nullable
+as String,stockActual: null == stockActual ? _self.stockActual : stockActual // ignore: cast_nullable_to_non_nullable
+as double,
   ));
 }
 
@@ -280,7 +294,10 @@ as Money,
 /// @nodoc
 mixin _$Compra {
 
- String get id; String? get proveedorId; String? get proveedorNombre; String? get numeroFactura; String? get fotoFacturaPath; Money get total; bool get pagadaDeCaja; EstadoCompra get estado; String get usuarioNombre; DateTime get fecha; List<CompraItem> get items;
+ String get id; String? get proveedorId; String? get proveedorNombre; String? get numeroFactura; String? get fotoFacturaPath; Money get total; bool get pagadaDeCaja; EstadoCompra get estado; String get usuarioNombre; DateTime get fecha; List<CompraItem> get items;/// Solo en el detalle y solo si se pagó de caja: `true` si la sesión de
+/// caja de ESE pago sigue abierta, `false` si ya se cerró; `null` si no
+/// se pagó de caja (o no hay registro del pago).
+ bool? get cajaDelPagoAbierta;
 /// Create a copy of Compra
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -291,16 +308,16 @@ $CompraCopyWith<Compra> get copyWith => _$CompraCopyWithImpl<Compra>(this as Com
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Compra&&(identical(other.id, id) || other.id == id)&&(identical(other.proveedorId, proveedorId) || other.proveedorId == proveedorId)&&(identical(other.proveedorNombre, proveedorNombre) || other.proveedorNombre == proveedorNombre)&&(identical(other.numeroFactura, numeroFactura) || other.numeroFactura == numeroFactura)&&(identical(other.fotoFacturaPath, fotoFacturaPath) || other.fotoFacturaPath == fotoFacturaPath)&&(identical(other.total, total) || other.total == total)&&(identical(other.pagadaDeCaja, pagadaDeCaja) || other.pagadaDeCaja == pagadaDeCaja)&&(identical(other.estado, estado) || other.estado == estado)&&(identical(other.usuarioNombre, usuarioNombre) || other.usuarioNombre == usuarioNombre)&&(identical(other.fecha, fecha) || other.fecha == fecha)&&const DeepCollectionEquality().equals(other.items, items));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Compra&&(identical(other.id, id) || other.id == id)&&(identical(other.proveedorId, proveedorId) || other.proveedorId == proveedorId)&&(identical(other.proveedorNombre, proveedorNombre) || other.proveedorNombre == proveedorNombre)&&(identical(other.numeroFactura, numeroFactura) || other.numeroFactura == numeroFactura)&&(identical(other.fotoFacturaPath, fotoFacturaPath) || other.fotoFacturaPath == fotoFacturaPath)&&(identical(other.total, total) || other.total == total)&&(identical(other.pagadaDeCaja, pagadaDeCaja) || other.pagadaDeCaja == pagadaDeCaja)&&(identical(other.estado, estado) || other.estado == estado)&&(identical(other.usuarioNombre, usuarioNombre) || other.usuarioNombre == usuarioNombre)&&(identical(other.fecha, fecha) || other.fecha == fecha)&&const DeepCollectionEquality().equals(other.items, items)&&(identical(other.cajaDelPagoAbierta, cajaDelPagoAbierta) || other.cajaDelPagoAbierta == cajaDelPagoAbierta));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,proveedorId,proveedorNombre,numeroFactura,fotoFacturaPath,total,pagadaDeCaja,estado,usuarioNombre,fecha,const DeepCollectionEquality().hash(items));
+int get hashCode => Object.hash(runtimeType,id,proveedorId,proveedorNombre,numeroFactura,fotoFacturaPath,total,pagadaDeCaja,estado,usuarioNombre,fecha,const DeepCollectionEquality().hash(items),cajaDelPagoAbierta);
 
 @override
 String toString() {
-  return 'Compra(id: $id, proveedorId: $proveedorId, proveedorNombre: $proveedorNombre, numeroFactura: $numeroFactura, fotoFacturaPath: $fotoFacturaPath, total: $total, pagadaDeCaja: $pagadaDeCaja, estado: $estado, usuarioNombre: $usuarioNombre, fecha: $fecha, items: $items)';
+  return 'Compra(id: $id, proveedorId: $proveedorId, proveedorNombre: $proveedorNombre, numeroFactura: $numeroFactura, fotoFacturaPath: $fotoFacturaPath, total: $total, pagadaDeCaja: $pagadaDeCaja, estado: $estado, usuarioNombre: $usuarioNombre, fecha: $fecha, items: $items, cajaDelPagoAbierta: $cajaDelPagoAbierta)';
 }
 
 
@@ -311,7 +328,7 @@ abstract mixin class $CompraCopyWith<$Res>  {
   factory $CompraCopyWith(Compra value, $Res Function(Compra) _then) = _$CompraCopyWithImpl;
 @useResult
 $Res call({
- String id, String? proveedorId, String? proveedorNombre, String? numeroFactura, String? fotoFacturaPath, Money total, bool pagadaDeCaja, EstadoCompra estado, String usuarioNombre, DateTime fecha, List<CompraItem> items
+ String id, String? proveedorId, String? proveedorNombre, String? numeroFactura, String? fotoFacturaPath, Money total, bool pagadaDeCaja, EstadoCompra estado, String usuarioNombre, DateTime fecha, List<CompraItem> items, bool? cajaDelPagoAbierta
 });
 
 
@@ -328,7 +345,7 @@ class _$CompraCopyWithImpl<$Res>
 
 /// Create a copy of Compra
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? proveedorId = freezed,Object? proveedorNombre = freezed,Object? numeroFactura = freezed,Object? fotoFacturaPath = freezed,Object? total = null,Object? pagadaDeCaja = null,Object? estado = null,Object? usuarioNombre = null,Object? fecha = null,Object? items = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? proveedorId = freezed,Object? proveedorNombre = freezed,Object? numeroFactura = freezed,Object? fotoFacturaPath = freezed,Object? total = null,Object? pagadaDeCaja = null,Object? estado = null,Object? usuarioNombre = null,Object? fecha = null,Object? items = null,Object? cajaDelPagoAbierta = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,proveedorId: freezed == proveedorId ? _self.proveedorId : proveedorId // ignore: cast_nullable_to_non_nullable
@@ -341,7 +358,8 @@ as bool,estado: null == estado ? _self.estado : estado // ignore: cast_nullable_
 as EstadoCompra,usuarioNombre: null == usuarioNombre ? _self.usuarioNombre : usuarioNombre // ignore: cast_nullable_to_non_nullable
 as String,fecha: null == fecha ? _self.fecha : fecha // ignore: cast_nullable_to_non_nullable
 as DateTime,items: null == items ? _self.items : items // ignore: cast_nullable_to_non_nullable
-as List<CompraItem>,
+as List<CompraItem>,cajaDelPagoAbierta: freezed == cajaDelPagoAbierta ? _self.cajaDelPagoAbierta : cajaDelPagoAbierta // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
@@ -426,10 +444,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items,  bool? cajaDelPagoAbierta)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Compra() when $default != null:
-return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items);case _:
+return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items,_that.cajaDelPagoAbierta);case _:
   return orElse();
 
 }
@@ -447,10 +465,10 @@ return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFac
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items,  bool? cajaDelPagoAbierta)  $default,) {final _that = this;
 switch (_that) {
 case _Compra():
-return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items);case _:
+return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items,_that.cajaDelPagoAbierta);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -467,10 +485,10 @@ return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFac
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? proveedorId,  String? proveedorNombre,  String? numeroFactura,  String? fotoFacturaPath,  Money total,  bool pagadaDeCaja,  EstadoCompra estado,  String usuarioNombre,  DateTime fecha,  List<CompraItem> items,  bool? cajaDelPagoAbierta)?  $default,) {final _that = this;
 switch (_that) {
 case _Compra() when $default != null:
-return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items);case _:
+return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFactura,_that.fotoFacturaPath,_that.total,_that.pagadaDeCaja,_that.estado,_that.usuarioNombre,_that.fecha,_that.items,_that.cajaDelPagoAbierta);case _:
   return null;
 
 }
@@ -482,7 +500,7 @@ return $default(_that.id,_that.proveedorId,_that.proveedorNombre,_that.numeroFac
 
 
 class _Compra implements Compra {
-  const _Compra({required this.id, this.proveedorId, this.proveedorNombre, this.numeroFactura, this.fotoFacturaPath, required this.total, required this.pagadaDeCaja, required this.estado, required this.usuarioNombre, required this.fecha, final  List<CompraItem> items = const []}): _items = items;
+  const _Compra({required this.id, this.proveedorId, this.proveedorNombre, this.numeroFactura, this.fotoFacturaPath, required this.total, required this.pagadaDeCaja, required this.estado, required this.usuarioNombre, required this.fecha, final  List<CompraItem> items = const [], this.cajaDelPagoAbierta}): _items = items;
   
 
 @override final  String id;
@@ -502,6 +520,10 @@ class _Compra implements Compra {
   return EqualUnmodifiableListView(_items);
 }
 
+/// Solo en el detalle y solo si se pagó de caja: `true` si la sesión de
+/// caja de ESE pago sigue abierta, `false` si ya se cerró; `null` si no
+/// se pagó de caja (o no hay registro del pago).
+@override final  bool? cajaDelPagoAbierta;
 
 /// Create a copy of Compra
 /// with the given fields replaced by the non-null parameter values.
@@ -513,16 +535,16 @@ _$CompraCopyWith<_Compra> get copyWith => __$CompraCopyWithImpl<_Compra>(this, _
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Compra&&(identical(other.id, id) || other.id == id)&&(identical(other.proveedorId, proveedorId) || other.proveedorId == proveedorId)&&(identical(other.proveedorNombre, proveedorNombre) || other.proveedorNombre == proveedorNombre)&&(identical(other.numeroFactura, numeroFactura) || other.numeroFactura == numeroFactura)&&(identical(other.fotoFacturaPath, fotoFacturaPath) || other.fotoFacturaPath == fotoFacturaPath)&&(identical(other.total, total) || other.total == total)&&(identical(other.pagadaDeCaja, pagadaDeCaja) || other.pagadaDeCaja == pagadaDeCaja)&&(identical(other.estado, estado) || other.estado == estado)&&(identical(other.usuarioNombre, usuarioNombre) || other.usuarioNombre == usuarioNombre)&&(identical(other.fecha, fecha) || other.fecha == fecha)&&const DeepCollectionEquality().equals(other._items, _items));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Compra&&(identical(other.id, id) || other.id == id)&&(identical(other.proveedorId, proveedorId) || other.proveedorId == proveedorId)&&(identical(other.proveedorNombre, proveedorNombre) || other.proveedorNombre == proveedorNombre)&&(identical(other.numeroFactura, numeroFactura) || other.numeroFactura == numeroFactura)&&(identical(other.fotoFacturaPath, fotoFacturaPath) || other.fotoFacturaPath == fotoFacturaPath)&&(identical(other.total, total) || other.total == total)&&(identical(other.pagadaDeCaja, pagadaDeCaja) || other.pagadaDeCaja == pagadaDeCaja)&&(identical(other.estado, estado) || other.estado == estado)&&(identical(other.usuarioNombre, usuarioNombre) || other.usuarioNombre == usuarioNombre)&&(identical(other.fecha, fecha) || other.fecha == fecha)&&const DeepCollectionEquality().equals(other._items, _items)&&(identical(other.cajaDelPagoAbierta, cajaDelPagoAbierta) || other.cajaDelPagoAbierta == cajaDelPagoAbierta));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,proveedorId,proveedorNombre,numeroFactura,fotoFacturaPath,total,pagadaDeCaja,estado,usuarioNombre,fecha,const DeepCollectionEquality().hash(_items));
+int get hashCode => Object.hash(runtimeType,id,proveedorId,proveedorNombre,numeroFactura,fotoFacturaPath,total,pagadaDeCaja,estado,usuarioNombre,fecha,const DeepCollectionEquality().hash(_items),cajaDelPagoAbierta);
 
 @override
 String toString() {
-  return 'Compra(id: $id, proveedorId: $proveedorId, proveedorNombre: $proveedorNombre, numeroFactura: $numeroFactura, fotoFacturaPath: $fotoFacturaPath, total: $total, pagadaDeCaja: $pagadaDeCaja, estado: $estado, usuarioNombre: $usuarioNombre, fecha: $fecha, items: $items)';
+  return 'Compra(id: $id, proveedorId: $proveedorId, proveedorNombre: $proveedorNombre, numeroFactura: $numeroFactura, fotoFacturaPath: $fotoFacturaPath, total: $total, pagadaDeCaja: $pagadaDeCaja, estado: $estado, usuarioNombre: $usuarioNombre, fecha: $fecha, items: $items, cajaDelPagoAbierta: $cajaDelPagoAbierta)';
 }
 
 
@@ -533,7 +555,7 @@ abstract mixin class _$CompraCopyWith<$Res> implements $CompraCopyWith<$Res> {
   factory _$CompraCopyWith(_Compra value, $Res Function(_Compra) _then) = __$CompraCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String? proveedorId, String? proveedorNombre, String? numeroFactura, String? fotoFacturaPath, Money total, bool pagadaDeCaja, EstadoCompra estado, String usuarioNombre, DateTime fecha, List<CompraItem> items
+ String id, String? proveedorId, String? proveedorNombre, String? numeroFactura, String? fotoFacturaPath, Money total, bool pagadaDeCaja, EstadoCompra estado, String usuarioNombre, DateTime fecha, List<CompraItem> items, bool? cajaDelPagoAbierta
 });
 
 
@@ -550,7 +572,7 @@ class __$CompraCopyWithImpl<$Res>
 
 /// Create a copy of Compra
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? proveedorId = freezed,Object? proveedorNombre = freezed,Object? numeroFactura = freezed,Object? fotoFacturaPath = freezed,Object? total = null,Object? pagadaDeCaja = null,Object? estado = null,Object? usuarioNombre = null,Object? fecha = null,Object? items = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? proveedorId = freezed,Object? proveedorNombre = freezed,Object? numeroFactura = freezed,Object? fotoFacturaPath = freezed,Object? total = null,Object? pagadaDeCaja = null,Object? estado = null,Object? usuarioNombre = null,Object? fecha = null,Object? items = null,Object? cajaDelPagoAbierta = freezed,}) {
   return _then(_Compra(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,proveedorId: freezed == proveedorId ? _self.proveedorId : proveedorId // ignore: cast_nullable_to_non_nullable
@@ -563,7 +585,8 @@ as bool,estado: null == estado ? _self.estado : estado // ignore: cast_nullable_
 as EstadoCompra,usuarioNombre: null == usuarioNombre ? _self.usuarioNombre : usuarioNombre // ignore: cast_nullable_to_non_nullable
 as String,fecha: null == fecha ? _self.fecha : fecha // ignore: cast_nullable_to_non_nullable
 as DateTime,items: null == items ? _self._items : items // ignore: cast_nullable_to_non_nullable
-as List<CompraItem>,
+as List<CompraItem>,cajaDelPagoAbierta: freezed == cajaDelPagoAbierta ? _self.cajaDelPagoAbierta : cajaDelPagoAbierta // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
@@ -573,7 +596,8 @@ as List<CompraItem>,
 /// @nodoc
 mixin _$ItemCompraInput {
 
- String get productoId; String get productoNombre; double get cantidad; Money get costoUnitario;
+ String get productoId; String get productoNombre; double get cantidad; Money get costoUnitario;/// Solo para mostrar ("2 libras × RD$ 150.00"); no se guarda.
+ String get unidad;
 /// Create a copy of ItemCompraInput
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -584,16 +608,16 @@ $ItemCompraInputCopyWith<ItemCompraInput> get copyWith => _$ItemCompraInputCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ItemCompraInput&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ItemCompraInput&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario)&&(identical(other.unidad, unidad) || other.unidad == unidad));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario);
+int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario,unidad);
 
 @override
 String toString() {
-  return 'ItemCompraInput(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario)';
+  return 'ItemCompraInput(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario, unidad: $unidad)';
 }
 
 
@@ -604,7 +628,7 @@ abstract mixin class $ItemCompraInputCopyWith<$Res>  {
   factory $ItemCompraInputCopyWith(ItemCompraInput value, $Res Function(ItemCompraInput) _then) = _$ItemCompraInputCopyWithImpl;
 @useResult
 $Res call({
- String productoId, String productoNombre, double cantidad, Money costoUnitario
+ String productoId, String productoNombre, double cantidad, Money costoUnitario, String unidad
 });
 
 
@@ -621,13 +645,14 @@ class _$ItemCompraInputCopyWithImpl<$Res>
 
 /// Create a copy of ItemCompraInput
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,Object? unidad = null,}) {
   return _then(_self.copyWith(
 productoId: null == productoId ? _self.productoId : productoId // ignore: cast_nullable_to_non_nullable
 as String,productoNombre: null == productoNombre ? _self.productoNombre : productoNombre // ignore: cast_nullable_to_non_nullable
 as String,cantidad: null == cantidad ? _self.cantidad : cantidad // ignore: cast_nullable_to_non_nullable
 as double,costoUnitario: null == costoUnitario ? _self.costoUnitario : costoUnitario // ignore: cast_nullable_to_non_nullable
-as Money,
+as Money,unidad: null == unidad ? _self.unidad : unidad // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 
@@ -712,10 +737,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ItemCompraInput() when $default != null:
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad);case _:
   return orElse();
 
 }
@@ -733,10 +758,10 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad)  $default,) {final _that = this;
 switch (_that) {
 case _ItemCompraInput():
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -753,10 +778,10 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String productoId,  String productoNombre,  double cantidad,  Money costoUnitario,  String unidad)?  $default,) {final _that = this;
 switch (_that) {
 case _ItemCompraInput() when $default != null:
-return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario);case _:
+return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costoUnitario,_that.unidad);case _:
   return null;
 
 }
@@ -768,13 +793,15 @@ return $default(_that.productoId,_that.productoNombre,_that.cantidad,_that.costo
 
 
 class _ItemCompraInput extends ItemCompraInput {
-  const _ItemCompraInput({required this.productoId, required this.productoNombre, required this.cantidad, required this.costoUnitario}): super._();
+  const _ItemCompraInput({required this.productoId, required this.productoNombre, required this.cantidad, required this.costoUnitario, this.unidad = 'unidad'}): super._();
   
 
 @override final  String productoId;
 @override final  String productoNombre;
 @override final  double cantidad;
 @override final  Money costoUnitario;
+/// Solo para mostrar ("2 libras × RD$ 150.00"); no se guarda.
+@override@JsonKey() final  String unidad;
 
 /// Create a copy of ItemCompraInput
 /// with the given fields replaced by the non-null parameter values.
@@ -786,16 +813,16 @@ _$ItemCompraInputCopyWith<_ItemCompraInput> get copyWith => __$ItemCompraInputCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ItemCompraInput&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ItemCompraInput&&(identical(other.productoId, productoId) || other.productoId == productoId)&&(identical(other.productoNombre, productoNombre) || other.productoNombre == productoNombre)&&(identical(other.cantidad, cantidad) || other.cantidad == cantidad)&&(identical(other.costoUnitario, costoUnitario) || other.costoUnitario == costoUnitario)&&(identical(other.unidad, unidad) || other.unidad == unidad));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario);
+int get hashCode => Object.hash(runtimeType,productoId,productoNombre,cantidad,costoUnitario,unidad);
 
 @override
 String toString() {
-  return 'ItemCompraInput(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario)';
+  return 'ItemCompraInput(productoId: $productoId, productoNombre: $productoNombre, cantidad: $cantidad, costoUnitario: $costoUnitario, unidad: $unidad)';
 }
 
 
@@ -806,7 +833,7 @@ abstract mixin class _$ItemCompraInputCopyWith<$Res> implements $ItemCompraInput
   factory _$ItemCompraInputCopyWith(_ItemCompraInput value, $Res Function(_ItemCompraInput) _then) = __$ItemCompraInputCopyWithImpl;
 @override @useResult
 $Res call({
- String productoId, String productoNombre, double cantidad, Money costoUnitario
+ String productoId, String productoNombre, double cantidad, Money costoUnitario, String unidad
 });
 
 
@@ -823,13 +850,14 @@ class __$ItemCompraInputCopyWithImpl<$Res>
 
 /// Create a copy of ItemCompraInput
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? productoId = null,Object? productoNombre = null,Object? cantidad = null,Object? costoUnitario = null,Object? unidad = null,}) {
   return _then(_ItemCompraInput(
 productoId: null == productoId ? _self.productoId : productoId // ignore: cast_nullable_to_non_nullable
 as String,productoNombre: null == productoNombre ? _self.productoNombre : productoNombre // ignore: cast_nullable_to_non_nullable
 as String,cantidad: null == cantidad ? _self.cantidad : cantidad // ignore: cast_nullable_to_non_nullable
 as double,costoUnitario: null == costoUnitario ? _self.costoUnitario : costoUnitario // ignore: cast_nullable_to_non_nullable
-as Money,
+as Money,unidad: null == unidad ? _self.unidad : unidad // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 

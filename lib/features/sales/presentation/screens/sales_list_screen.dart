@@ -12,6 +12,7 @@ import '../../../../core/utils/rango_fecha.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/venta.dart';
+import '../metodo_pago_texto.dart';
 import '../providers/sales_providers.dart';
 
 /// Historial de ventas (RF-VEN), más reciente primero y AGRUPADO POR DÍA, cada
@@ -19,9 +20,8 @@ import '../providers/sales_providers.dart';
 /// (Todas / Completadas / Anuladas) y período (Hoy / Esta semana / Este mes /
 /// Personalizado). El FAB abre directamente el punto de venta.
 ///
-/// El método de pago NO se muestra en la fila: la lista de ventas no lo trae
-/// (`Venta.metodoPago` solo se carga en el detalle) y obtenerlo exigiría una
-/// consulta por venta. Se ve al abrir la venta.
+/// El método de pago sale en cada fila (ícono + texto): viene en la misma
+/// consulta de la lista, sin una consulta por venta.
 class SalesListScreen extends ConsumerWidget {
   const SalesListScreen({super.key});
 
@@ -307,6 +307,15 @@ class _VentaTile extends StatelessWidget {
     final vendedor = venta.usuarioNombre != usuarioActual
         ? venta.usuarioNombre
         : null;
+    // Método de pago (viene en la misma consulta de la lista): ícono + texto.
+    final ({String etiqueta, IconData icono})? metodo = venta.pagoMixto
+        ? (etiqueta: 'Mixto', icono: Icons.shuffle)
+        : (venta.metodoPago == null
+              ? null
+              : (
+                  etiqueta: venta.metodoPago!.etiqueta,
+                  icono: venta.metodoPago!.icono,
+                ));
     final detalle = [
       if (vendedor != null) 'Vendió $vendedor',
       if (nota != null && nota.isNotEmpty) nota,
@@ -338,6 +347,26 @@ class _VentaTile extends StatelessWidget {
                       ' · ${rapida ? 'Venta rápida' : 'Venta detallada'}',
                       style: textTheme.titleSmall,
                     ),
+                    if (metodo != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            metodo.icono,
+                            size: 14,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Flexible(
+                            child: Text(
+                              metodo.etiqueta,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     if (detalle.isNotEmpty)
                       Text(
                         detalle,

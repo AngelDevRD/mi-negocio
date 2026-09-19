@@ -460,7 +460,8 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
         costoUnitario: Money.fromPesos(130),
       ),
     ],
-    pagadaDeCaja: false,
+    // Pagada de caja: el detalle y la confirmación de anular lo reflejan.
+    pagadaDeCaja: true,
     usuarioId: usuarioId,
   );
   final compraAyer = (await compras.registrarCompra(

@@ -20,14 +20,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 class _AuthFalso extends AuthController {
+  _AuthFalso([this.rol = RolUsuario.administrador]);
+
+  final RolUsuario rol;
+
   @override
   Future<EstadoSesion> build() async => SesionActiva(
-    const Usuario(
+    Usuario(
       id: 'u1',
       negocioId: 'n1',
       nombre: 'Ana Admin',
       username: 'ana',
-      rol: RolUsuario.administrador,
+      rol: rol,
       activo: true,
     ),
   );
@@ -78,6 +82,23 @@ class RepoComprasFalso implements PurchasesRepository {
     return compras.where((c) => c.id == id).firstOrNull;
   }
 
+  /// Llamadas a `anularCompra` (ids) y su resultado configurable.
+  final anulaciones = <String>[];
+  Completer<void>? bloqueoAnulacion;
+  Result<ResultadoAnulacionCompra> resultadoAnulacion = const Result.ok(
+    ResultadoAnulacionCompra(),
+  );
+
+  @override
+  Future<Result<ResultadoAnulacionCompra>> anularCompra(
+    String id, {
+    required String usuarioId,
+  }) async {
+    anulaciones.add(id);
+    if (bloqueoAnulacion != null) await bloqueoAnulacion!.future;
+    return resultadoAnulacion;
+  }
+
   @override
   Future<Result<String>> registrarCompra({
     String? proveedorId,
@@ -109,6 +130,7 @@ Compra _compra(
   EstadoCompra estado = EstadoCompra.completada,
   String? factura,
   bool deCaja = false,
+  bool? cajaAbierta,
   List<CompraItem> items = const [],
 }) => Compra(
   id: id,
@@ -121,6 +143,7 @@ Compra _compra(
   usuarioNombre: 'Ana Admin',
   fecha: fecha.toUtc(),
   items: items,
+  cajaDelPagoAbierta: cajaAbierta,
 );
 
 const _itemArroz = ItemCompraInput(
@@ -149,8 +172,9 @@ GoRouter _router(Widget pantalla) => GoRouter(
 Future<void> _montarPantalla(
   WidgetTester tester,
   Widget pantalla,
-  RepoComprasFalso repo,
-) async {
+  RepoComprasFalso repo, {
+  RolUsuario rol = RolUsuario.administrador,
+}) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -160,7 +184,7 @@ Future<void> _montarPantalla(
     ProviderScope(
       overrides: [
         purchasesRepositoryProvider.overrideWithValue(repo),
-        authControllerProvider.overrideWith(_AuthFalso.new),
+        authControllerProvider.overrideWith(() => _AuthFalso(rol)),
       ],
       child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
     ),
@@ -379,7 +403,7 @@ void main() {
       expect(find.text('F-77'), findsOneWidget);
       expect(find.textContaining('10:30'), findsOneWidget);
       expect(find.text('Arroz selecto'), findsOneWidget);
-      expect(find.text('2.5 × '), findsOneWidget);
+      expect(find.text('2.5 unidades × '), findsOneWidget);
       expect(find.text('RD\$ 150.00'), findsOneWidget); // costo unitario
       // Subtotal del ítem y total de la compra.
       expect(find.text('RD\$ 375.00'), findsNWidgets(2));
@@ -424,6 +448,297 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Distribuidora Caribe'), findsOneWidget);
+    });
+  });
+
+  group('anular compra (detalle)', () {
+    const arroz = CompraItem(
+      productoId: 'a',
+      productoNombre: 'Arroz selecto',
+      cantidad: 50,
+      costoUnitario: Money(2800),
+      unidad: 'libra',
+      stockActual: 80,
+    );
+    const salami = CompraItem(
+      productoId: 's',
+      productoNombre: 'Salami',
+      cantidad: 10,
+      costoUnitario: Money(10000),
+      unidad: 'libra',
+      stockActual: 4,
+    );
+
+    Compra completada({bool deCaja = false, bool? cajaAbierta}) => _compra(
+      'c1',
+      240000,
+      _hoy(10),
+      deCaja: deCaja,
+      cajaAbierta: cajaAbierta,
+      items: const [arroz, salami],
+    );
+
+    Future<void> abrirConfirmacion(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> montar(
+      WidgetTester tester,
+      RepoComprasFalso repo, {
+      RolUsuario rol = RolUsuario.administrador,
+    }) => _montarPantalla(
+      tester,
+      const PurchaseDetailScreen(compraId: 'c1'),
+      repo,
+      rol: rol,
+    );
+
+    testWidgets('los ítems muestran la cantidad CON su unidad', (tester) async {
+      await montar(tester, RepoComprasFalso(compras: [completada()]));
+
+      expect(find.text('50 libras × '), findsOneWidget);
+      expect(find.text('10 libras × '), findsOneWidget);
+    });
+
+    testWidgets('el Administrador ve "Anular compra" en una compra '
+        'completada', (tester) async {
+      await montar(tester, RepoComprasFalso(compras: [completada()]));
+
+      expect(
+        find.widgetWithText(OutlinedButton, 'Anular compra'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('el Cajero NO ve "Anular compra"', (tester) async {
+      await montar(
+        tester,
+        RepoComprasFalso(compras: [completada()]),
+        rol: RolUsuario.cajero,
+      );
+
+      expect(find.text('Anular compra'), findsNothing);
+    });
+
+    testWidgets('una compra ya anulada NO ofrece "Anular compra"', (
+      tester,
+    ) async {
+      await _montarPantalla(
+        tester,
+        const PurchaseDetailScreen(compraId: 'x'),
+        RepoComprasFalso(
+          compras: [_compra('x', 10000, _hoy(9), estado: EstadoCompra.anulada)],
+        ),
+      );
+
+      expect(find.text('Anular compra'), findsNothing);
+      expect(find.text('Anulada'), findsOneWidget);
+    });
+
+    testWidgets('la confirmación describe el stock por producto con su unidad '
+        'y avisa de los que quedan en negativo', (tester) async {
+      await montar(tester, RepoComprasFalso(compras: [completada()]));
+
+      await abrirConfirmacion(tester);
+
+      expect(find.text('¿Anular esta compra?'), findsOneWidget);
+      // Arroz: 80 - 50 = 30 (bien). Salami: 4 - 10 = -6 (negativo).
+      expect(
+        find.textContaining(
+          'Arroz selecto: -50 libras (hay 80 libras, quedaría 30 libras)',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'Salami: -10 libras (hay 4 libras, quedaría -6 libras)',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('NEGATIVO: Salami'), findsOneWidget);
+      expect(find.textContaining('no se puede deshacer'), findsOneWidget);
+    });
+
+    testWidgets('confirmación: compra NO pagada de caja -> la caja no cambia', (
+      tester,
+    ) async {
+      await montar(tester, RepoComprasFalso(compras: [completada()]));
+
+      await abrirConfirmacion(tester);
+
+      expect(
+        find.textContaining('la compra no se pagó de caja'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('confirmación: pagada de caja con la caja ABIERTA -> se '
+        'devuelve el dinero', (tester) async {
+      await montar(
+        tester,
+        RepoComprasFalso(
+          compras: [completada(deCaja: true, cajaAbierta: true)],
+        ),
+      );
+
+      await abrirConfirmacion(tester);
+
+      expect(
+        find.textContaining('se devuelven RD\$ 2,400.00 a la caja abierta'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('confirmación: pagada de caja con la caja YA CERRADA -> avisa '
+        'que no se registra movimiento', (tester) async {
+      await montar(
+        tester,
+        RepoComprasFalso(
+          compras: [completada(deCaja: true, cajaAbierta: false)],
+        ),
+      );
+
+      await abrirConfirmacion(tester);
+
+      expect(find.textContaining('ya se cerró'), findsOneWidget);
+      expect(find.textContaining('entrada de efectivo'), findsOneWidget);
+    });
+
+    testWidgets('cancelar la confirmación no anula nada', (tester) async {
+      final repo = RepoComprasFalso(compras: [completada()]);
+      await montar(tester, repo);
+      await abrirConfirmacion(tester);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(repo.anulaciones, isEmpty);
+      expect(find.text('¿Anular esta compra?'), findsNothing);
+    });
+
+    testWidgets('confirmar anula UNA vez y avisa con un snackbar', (
+      tester,
+    ) async {
+      final repo = RepoComprasFalso(compras: [completada()]);
+      await montar(tester, repo);
+      await abrirConfirmacion(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+
+      expect(repo.anulaciones, ['c1']);
+      expect(find.text('Compra anulada.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('doble toque en el botón = una sola confirmación y una sola '
+        'anulación', (tester) async {
+      final repo = RepoComprasFalso(compras: [completada()]);
+      await montar(tester, repo);
+
+      final boton = find.widgetWithText(OutlinedButton, 'Anular compra');
+      await tester.tap(boton);
+      await tester.tap(boton, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('¿Anular esta compra?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+      expect(repo.anulaciones, hasLength(1));
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('caja ya cerrada: tras anular aparece el aviso para registrar '
+        'la devolución como entrada de efectivo', (tester) async {
+      final repo =
+          RepoComprasFalso(
+              compras: [completada(deCaja: true, cajaAbierta: false)],
+            )
+            ..resultadoAnulacion = const Result.ok(
+              ResultadoAnulacionCompra(cajaYaCerrada: true),
+            );
+      await montar(tester, repo);
+      await abrirConfirmacion(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining(
+          'La caja de esta compra ya se cerró. Si el proveedor te devolvió '
+          'dinero, regístralo como una entrada de efectivo.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('costo conservado: el aviso lo nombra', (tester) async {
+      final repo = RepoComprasFalso(compras: [completada()])
+        ..resultadoAnulacion = const Result.ok(
+          ResultadoAnulacionCompra(costoConservado: ['Salami']),
+        );
+      await montar(tester, repo);
+      await abrirConfirmacion(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('El costo de Salami se dejó como está'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('si el repositorio falla se muestra el error', (tester) async {
+      final repo = RepoComprasFalso(compras: [completada()])
+        ..resultadoAnulacion = const Result.fail(
+          PermissionFailure('Solo el administrador puede anular compras.'),
+        );
+      await montar(tester, repo);
+      await abrirConfirmacion(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Anular compra'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Solo el administrador puede anular compras.'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    test('mensajeAnulacionCompra: sin ningún producto negativo no hay '
+        'advertencia', () {
+      final compra = _compra(
+        'z',
+        100,
+        _hoy(9),
+        items: const [
+          CompraItem(
+            productoId: 'a',
+            productoNombre: 'Arroz',
+            cantidad: 1,
+            costoUnitario: Money(100),
+            unidad: 'libra',
+            stockActual: 5,
+          ),
+        ],
+      );
+
+      final texto = mensajeAnulacionCompra(compra);
+
+      expect(
+        texto,
+        contains('Arroz: -1 libra (hay 5 libras, quedaría 4 libras)'),
+      );
+      expect(texto, isNot(contains('NEGATIVO')));
     });
   });
 
@@ -551,6 +866,27 @@ void main() {
       expect(find.text('Nueva compra'), findsOneWidget);
       expect(container.read(nuevaCompraProvider).items, isNotEmpty);
       await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('el ítem del borrador muestra la cantidad con su unidad', (
+      tester,
+    ) async {
+      final container = await _montarFormulario(tester, RepoComprasFalso());
+
+      container
+          .read(nuevaCompraProvider.notifier)
+          .agregarItem(
+            const ItemCompraInput(
+              productoId: 'a',
+              productoNombre: 'Arroz selecto',
+              cantidad: 50,
+              costoUnitario: Money(2800),
+              unidad: 'libra',
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.text('50 libras × '), findsOneWidget);
     });
 
     testWidgets('sin productos: estado vacío con texto y los IconButton '
