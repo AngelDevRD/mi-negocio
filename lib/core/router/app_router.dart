@@ -27,8 +27,6 @@ import '../../features/expenses/presentation/screens/expenses_list_screen.dart';
 import '../../features/exports/presentation/screens/exports_screen.dart';
 import '../../features/import/presentation/screens/import_screen.dart';
 import '../../features/inventory/presentation/screens/inventory_adjustment_screen.dart';
-import '../../features/inventory/presentation/screens/inventory_list_screen.dart';
-import '../../features/inventory/presentation/screens/product_kardex_screen.dart';
 import '../../features/license/domain/entities/licencia.dart';
 import '../../features/license/presentation/providers/license_providers.dart';
 import '../../features/license/presentation/screens/activation_screen.dart';
@@ -271,14 +269,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             ProductFormScreen(productId: state.pathParameters['id']!),
       ),
+      // Inventario y kárdex se fusionaron con Productos: se conservan como
+      // redirecciones (enlaces y favoritos antiguos siguen funcionando).
       GoRoute(
         path: AppRoutes.inventario,
-        builder: (context, state) => const InventoryListScreen(),
+        redirect: (context, state) => AppRoutes.productos,
       ),
       GoRoute(
         path: '/inventario/:id',
-        builder: (context, state) =>
-            ProductKardexScreen(productId: state.pathParameters['id']!),
+        redirect: (context, state) =>
+            '/productos/${state.pathParameters['id']}',
       ),
       GoRoute(
         path: '/inventario/:id/ajuste',

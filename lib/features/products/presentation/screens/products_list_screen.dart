@@ -4,11 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/cantidades.dart';
+import '../../../../core/widgets/app_states.dart';
+import '../../../../core/widgets/money_text.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/producto.dart';
 import '../providers/products_providers.dart';
+import '../widgets/etiqueta_stock.dart';
 
-/// Catálogo de productos (RF-PROD): búsqueda, filtros por categoría/estado
-/// y acceso a alta, edición y gestión de categorías.
+/// Catálogo de productos (RF-PROD) con precio y existencias en una sola lista:
+/// búsqueda, categoría y chips Todos | Stock bajo | Inactivos.
 class ProductsListScreen extends ConsumerWidget {
   const ProductsListScreen({super.key});
 
@@ -18,15 +23,35 @@ class ProductsListScreen extends ConsumerWidget {
     final categoriasAsync = ref.watch(categoriasProvider);
     final filtro = ref.watch(productosFiltroProvider);
     final controller = ref.read(productosFiltroProvider.notifier);
+    final esAdmin = switch (ref.watch(authControllerProvider).value) {
+      SesionActiva(:final usuario) => usuario.esAdministrador,
+      _ => false,
+    };
+
+    // Chip activo: "Todos" = activos, "Inactivos" = inactivos.
+    final chip = filtro.soloStockBajo
+        ? _FiltroChip.stockBajo
+        : filtro.soloActivos == false
+        ? _FiltroChip.inactivos
+        : _FiltroChip.todos;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Productos'),
         actions: [
-          IconButton(
-            tooltip: 'Categorías',
-            icon: const Icon(Icons.category_outlined),
-            onPressed: () => context.push(AppRoutes.productosCategorias),
+          PopupMenuButton<String>(
+            tooltip: 'Más opciones',
+            onSelected: (opcion) {
+              if (opcion == 'categorias') {
+                context.push(AppRoutes.productosCategorias);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'categorias',
+                child: Text('Gestionar categorías'),
+              ),
+            ],
           ),
         ],
       ),
@@ -36,7 +61,7 @@ class ProductsListScreen extends ConsumerWidget {
         heroTag: null,
         onPressed: () => context.push(AppRoutes.productosNuevo),
         icon: const Icon(Icons.add),
-        label: const Text('Producto'),
+        label: const Text('Nuevo producto'),
       ),
       body: Column(
         children: [
@@ -85,37 +110,62 @@ class ProductsListScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: SegmentedButton<bool?>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Activos')),
-                ButtonSegment(value: false, label: Text('Inactivos')),
-                ButtonSegment(value: null, label: Text('Todos')),
-              ],
-              selected: {filtro.soloActivos},
-              onSelectionChanged: (seleccion) => controller.actualizar(
-                (actual) => actual.copyWith(soloActivos: seleccion.first),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  for (final (valor, etiqueta) in [
+                    (_FiltroChip.todos, 'Todos'),
+                    (_FiltroChip.stockBajo, 'Stock bajo'),
+                    (_FiltroChip.inactivos, 'Inactivos'),
+                  ])
+                    ChoiceChip(
+                      label: Text(etiqueta),
+                      selected: chip == valor,
+                      onSelected: (_) => controller.actualizar(
+                        (actual) => actual.copyWith(
+                          soloActivos: valor != _FiltroChip.inactivos,
+                          soloStockBajo: valor == _FiltroChip.stockBajo,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Expanded(
             child: productosAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const Center(
-                child: Text('No se pudieron cargar los productos.'),
+              loading: () => const LoadingView(),
+              error: (error, stackTrace) => ErrorState(
+                mensaje: 'No se pudieron cargar los productos.',
+                error: error,
+                stackTrace: stackTrace,
+                onReintentar: () => ref.invalidate(productosProvider),
               ),
               data: (productos) {
                 if (productos.isEmpty) {
-                  return const Center(
-                    child: Text('No hay productos que coincidan.'),
-                  );
+                  final sinFiltros =
+                      filtro.busqueda.trim().isEmpty &&
+                      filtro.categoriaId == null &&
+                      chip == _FiltroChip.todos;
+                  return sinFiltros
+                      ? _SinProductos(esAdmin: esAdmin)
+                      : const EmptyState(
+                          icono: Icons.search_off_outlined,
+                          titulo: 'Sin resultados para este filtro',
+                          descripcion:
+                              'Prueba con otra búsqueda o cambia el filtro.',
+                        );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.md,
                     0,
                     AppSpacing.md,
-                    AppSpacing.xl,
+                    96,
                   ),
                   itemCount: productos.length,
                   separatorBuilder: (_, _) =>
@@ -132,6 +182,44 @@ class ProductsListScreen extends ConsumerWidget {
   }
 }
 
+enum _FiltroChip { todos, stockBajo, inactivos }
+
+/// Catálogo vacío: invita a agregar el primer producto (y, solo el
+/// Administrador, a importarlos desde Excel).
+class _SinProductos extends StatelessWidget {
+  const _SinProductos({required this.esAdmin});
+
+  final bool esAdmin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            EmptyState(
+              compacto: true,
+              icono: Icons.inventory_2_outlined,
+              titulo: 'Aún no tienes productos',
+              descripcion:
+                  'Agrega tu primer producto para empezar a vender y llevar '
+                  'el control de tu inventario.',
+              accionLabel: 'Agregar producto',
+              onAccion: () => context.push(AppRoutes.productosNuevo),
+            ),
+            if (esAdmin)
+              TextButton(
+                onPressed: () => context.push(AppRoutes.importar),
+                child: const Text('Importar desde Excel'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProductoTile extends StatelessWidget {
   const _ProductoTile({required this.producto});
 
@@ -140,30 +228,71 @@ class _ProductoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final detalle = [
+      producto.categoriaNombre ?? 'Sin categoría',
+      if (!producto.activo) 'Inactivo',
+    ].join(' · ');
+
     return Card(
-      child: ListTile(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: () => context.push('/productos/${producto.id}'),
-        leading: CircleAvatar(
-          backgroundColor: producto.activo
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerHighest,
-          child: Icon(
-            Icons.inventory_2_outlined,
-            color: producto.activo ? scheme.onPrimaryContainer : scheme.outline,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      producto.nombre,
+                      style: textTheme.titleMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      detalle,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          formatoCantidadUnidad(
+                            producto.stockActual,
+                            producto.unidad,
+                          ),
+                          style: textTheme.bodyMedium,
+                        ),
+                        EtiquetaStock(producto: producto),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 130),
+                child: MoneyText(
+                  producto.precioVenta,
+                  textAlign: TextAlign.right,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        title: Text(producto.nombre),
-        subtitle: Text(
-          '${producto.categoriaNombre ?? 'Sin categoría'} · '
-          '${producto.unidad} · Venta: ${producto.precioVenta.format()}'
-          '${producto.activo ? '' : ' · Inactivo'}',
-        ),
-        trailing: producto.stockBajo
-            ? Tooltip(
-                message: 'Stock bajo',
-                child: Icon(Icons.warning_amber_outlined, color: scheme.error),
-              )
-            : Text(producto.stockActual.toStringAsFixed(2)),
       ),
     );
   }

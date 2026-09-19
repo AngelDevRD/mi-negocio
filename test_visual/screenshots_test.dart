@@ -49,6 +49,12 @@ void main() {
         await sesion.ir('/productos');
         await sesion.capturar('admin_productos');
 
+        // Filtro "Stock bajo" y detalle único del producto (admin).
+        await sesion.tocarTexto('Stock bajo');
+        await sesion.capturar('admin_productos_stock_bajo');
+        await sesion.tocarTexto('Todos');
+        await sesion.tocarTexto('Arroz selecto');
+        await sesion.capturar('admin_producto_detalle');
         await sesion.ir('/mas');
         await sesion.capturar('admin_mas');
 
@@ -70,6 +76,11 @@ void main() {
       cuerpo: (sesion) async {
         await sesion.ir('/mas');
         await sesion.capturar('cajero_mas');
+
+        // Detalle de producto del cajero: sin costo, margen ni "Ajustar stock".
+        await sesion.ir('/productos');
+        await sesion.tocarTexto('Arroz selecto');
+        await sesion.capturar('cajero_producto_detalle');
       },
     );
   });

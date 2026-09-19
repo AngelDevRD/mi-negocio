@@ -63,7 +63,6 @@ void main() {
         'Clientes y fiado',
         'Compras',
         'Gastos',
-        'Inventario',
         'Cuenta',
         'Cerrar sesión',
       ]) {
@@ -100,7 +99,6 @@ void main() {
         'Operación',
         'Compras',
         'Gastos',
-        'Inventario',
         'Personal',
         'Empleados',
         'Gestionar usuarios',
@@ -122,6 +120,16 @@ void main() {
       expect(find.text('Ana Admin'), findsOneWidget);
       expect(find.text('Administrador'), findsOneWidget);
     });
+  });
+
+  group('Inventario ya no está en Más (se fusionó con Productos)', () {
+    for (final rol in RolUsuario.values) {
+      testWidgets('$rol no ve "Inventario"', (tester) async {
+        await _montar(tester, rol);
+
+        expect(find.text('Inventario'), findsNothing);
+      });
+    }
   });
 
   group('Clientes y fiado', () {

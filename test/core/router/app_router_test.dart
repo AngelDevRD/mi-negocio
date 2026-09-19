@@ -106,6 +106,46 @@ void main() {
     }
   });
 
+  group('inventario fusionado con productos (redirecciones)', () {
+    for (final rol in RolUsuario.values) {
+      final sesion = SesionActiva(_usuario(rol));
+      testWidgets('/inventario termina en /productos ($rol)', (tester) async {
+        expect(
+          await _resolver(tester, AppRoutes.inventario, sesion: sesion),
+          AppRoutes.productos,
+        );
+      });
+      testWidgets('/inventario/:id termina en /productos/:id ($rol)', (
+        tester,
+      ) async {
+        expect(
+          await _resolver(tester, '/inventario/abc', sesion: sesion),
+          '/productos/abc',
+        );
+      });
+    }
+
+    testWidgets('/inventario/:id/ajuste se conserva SOLO para el '
+        'administrador', (tester) async {
+      expect(
+        await _resolver(
+          tester,
+          '/inventario/abc/ajuste',
+          sesion: SesionActiva(_usuario(RolUsuario.administrador)),
+        ),
+        '/inventario/abc/ajuste',
+      );
+      expect(
+        await _resolver(
+          tester,
+          '/inventario/abc/ajuste',
+          sesion: SesionActiva(_usuario(RolUsuario.cajero)),
+        ),
+        '/',
+      );
+    });
+  });
+
   group('venta detallada (alias del POS)', () {
     for (final rol in RolUsuario.values) {
       testWidgets('/ventas/detallada termina en /ventas/rapida ($rol)', (

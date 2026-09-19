@@ -13,6 +13,7 @@ import '../../../../core/widgets/widgets.dart';
 import '../../../customers/presentation/providers/customers_providers.dart';
 import '../../../license/domain/entities/licencia.dart';
 import '../../../license/presentation/providers/license_providers.dart';
+import '../../../products/presentation/providers/products_providers.dart';
 import '../../../sales/presentation/widgets/abrir_caja_dialog.dart';
 import '../../domain/entities/dashboard_data.dart';
 import '../providers/dashboard_providers.dart';
@@ -581,7 +582,8 @@ class _EncabezadoSeccion extends StatelessWidget {
   }
 }
 
-/// Productos con stock bajo (máx. 5) con enlace a Inventario.
+/// Productos con stock bajo (máx. 5) con enlace a Productos filtrado por stock
+/// bajo.
 class InventarioBajoSeccion extends ConsumerWidget {
   const InventarioBajoSeccion({super.key});
 
@@ -594,7 +596,15 @@ class InventarioBajoSeccion extends ConsumerWidget {
       children: [
         _EncabezadoSeccion(
           titulo: 'Inventario bajo',
-          onVerTodo: () => context.push(AppRoutes.inventario),
+          // Abre la pestaña Productos ya filtrada por stock bajo.
+          onVerTodo: () {
+            ref
+                .read(productosFiltroProvider.notifier)
+                .actualizar(
+                  (f) => f.copyWith(soloActivos: true, soloStockBajo: true),
+                );
+            context.go(AppRoutes.productos);
+          },
         ),
         productos.when(
           loading: () => const Card(

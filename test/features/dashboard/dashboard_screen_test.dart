@@ -11,11 +11,15 @@ import 'package:app_gestion/features/dashboard/presentation/screens/dashboard_sc
 import 'package:app_gestion/features/dashboard/presentation/widgets/dashboard_widgets.dart';
 import 'package:app_gestion/features/license/domain/entities/licencia.dart';
 import 'package:app_gestion/features/license/presentation/providers/license_providers.dart';
+import 'package:app_gestion/features/products/presentation/providers/products_providers.dart';
+import 'package:app_gestion/features/products/presentation/screens/products_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+
+import '../products/repos_falsos.dart';
 
 class _AuthFalso extends AuthController {
   _AuthFalso(this._estado);
@@ -82,6 +86,7 @@ Future<void> _montar(
   WidgetTester tester,
   List<Override> overrides, {
   Size tamano = const Size(500, 2400),
+  List<GoRoute> extra = const [],
 }) async {
   await tester.binding.setSurfaceSize(tamano);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -98,6 +103,7 @@ Future<void> _montar(
         AppRoutes.clientes,
       ])
         GoRoute(path: ruta, builder: (_, _) => destino('destino:$ruta')),
+      ...extra,
     ],
   );
   addTearDown(router.dispose);
@@ -221,7 +227,10 @@ void main() {
 
       // 3 indicadores en 2 columnas: el tercero baja a la fila siguiente.
       expect(y(tester, 'Ventas del mes'), y(tester, 'Compras del mes'));
-      expect(y(tester, 'Gastos del mes'), greaterThan(y(tester, 'Ventas del mes')));
+      expect(
+        y(tester, 'Gastos del mes'),
+        greaterThan(y(tester, 'Ventas del mes')),
+      );
       // Inventario bajo encima de Últimos movimientos.
       expect(
         y(tester, 'Últimos movimientos'),
@@ -280,6 +289,45 @@ void main() {
       );
 
       expect(_botonesPrimarios(tester), ['Nueva venta']);
+    });
+  });
+
+  group('inventario bajo -> Productos', () {
+    testWidgets('"Ver todo" abre la pestaña Productos con el filtro "Stock '
+        'bajo" activado', (tester) async {
+      final repo = RepoProductosFalso([
+        producto('Arroz', stock: 50),
+        producto('Salami', stock: 1, minimo: 5),
+      ]);
+      await _montar(
+        tester,
+        [
+          ..._overrides(rol: RolUsuario.cajero),
+          productsRepositoryProvider.overrideWithValue(repo),
+        ],
+        extra: [
+          GoRoute(
+            path: AppRoutes.productos,
+            builder: (_, _) => const ProductsListScreen(),
+          ),
+        ],
+      );
+
+      await tester.tap(find.text('Ver todo').first);
+      await tester.pumpAndSettle();
+
+      final chip = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, 'Stock bajo'),
+      );
+      expect(chip.selected, isTrue);
+      expect(
+        find.descendant(of: find.byType(Card), matching: find.text('Salami')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(Card), matching: find.text('Arroz')),
+        findsNothing,
+      );
     });
   });
 

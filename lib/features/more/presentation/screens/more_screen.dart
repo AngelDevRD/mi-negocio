@@ -47,12 +47,6 @@ const _secciones = [
       'Anota los gastos del negocio por categoría.',
       AppRoutes.gastos,
     ),
-    _Modulo(
-      Icons.warehouse_outlined,
-      'Inventario',
-      'Consulta las existencias y el kárdex de cada producto.',
-      AppRoutes.inventario,
-    ),
   ]),
   _Seccion('Personal', soloAdmin: true, [
     _Modulo(
