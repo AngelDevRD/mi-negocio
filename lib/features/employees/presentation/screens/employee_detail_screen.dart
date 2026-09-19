@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/empleado.dart';
 import '../../domain/entities/pago_empleado.dart';
 import '../providers/employees_providers.dart';
+import '../widgets/etiquetas_empleado.dart';
 
 /// Detalle de un empleado (RF-EMP): ficha, historial de pagos y total
 /// pagado (RF-EMP-04).
@@ -27,23 +29,27 @@ class EmployeeDetailScreen extends ConsumerStatefulWidget {
 class _EmployeeDetailScreenState extends ConsumerState<EmployeeDetailScreen> {
   bool _procesando = false;
 
-  void _mostrarError(String mensaje) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Theme.of(context).colorScheme.error,
-      ),
-    );
-  }
-
   Future<void> _alternarActivo(Empleado empleado) async {
+    if (_procesando) return;
     final usuario = ref.read(authControllerProvider).value;
     final usuarioId = switch (usuario) {
       SesionActiva(:final usuario) => usuario.id,
       _ => null,
     };
     if (usuarioId == null) return;
+
+    final desactivar = empleado.activo;
+    final confirmado = await mostrarConfirmacion(
+      context,
+      titulo: desactivar ? '¿Desactivar a ${empleado.nombre}?' : '¿Activar?',
+      mensaje: desactivar
+          ? 'Dejará de aparecer entre los empleados activos. Su historial de '
+                'pagos se conserva y puedes activarlo de nuevo cuando quieras.'
+          : '${empleado.nombre} volverá a aparecer entre los empleados '
+                'activos.',
+      confirmarLabel: desactivar ? 'Desactivar' : 'Activar',
+    );
+    if (!confirmado || !mounted) return;
 
     setState(() => _procesando = true);
     final resultado = await ref
@@ -56,8 +62,14 @@ class _EmployeeDetailScreenState extends ConsumerState<EmployeeDetailScreen> {
     if (!mounted) return;
     setState(() => _procesando = false);
     resultado.when(
-      ok: (_) => ref.invalidate(empleadoProvider(empleado.id)),
-      fail: (f) => _mostrarError(f.message),
+      ok: (_) {
+        ref.invalidate(empleadoProvider(empleado.id));
+        AppSnackbar.exito(
+          context,
+          desactivar ? 'Empleado desactivado.' : 'Empleado activado.',
+        );
+      },
+      fail: (f) => AppSnackbar.error(context, f.message),
     );
   }
 
@@ -94,6 +106,7 @@ class _EmployeeDetailScreenState extends ConsumerState<EmployeeDetailScreen> {
           data: (empleado) => empleado == null
               ? null
               : FloatingActionButton.extended(
+                  heroTag: null,
                   onPressed: () =>
                       context.push('/empleados/${empleado.id}/pago'),
                   icon: const Icon(Icons.payments_outlined),
@@ -102,12 +115,21 @@ class _EmployeeDetailScreenState extends ConsumerState<EmployeeDetailScreen> {
           orElse: () => null,
         ),
         body: empleadoAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) =>
-              const Center(child: Text('No se pudo cargar el empleado.')),
+          loading: () => const LoadingView(mensaje: 'Cargando empleado...'),
+          error: (error, stackTrace) => ErrorState(
+            mensaje: 'No se pudo cargar el empleado.',
+            error: error,
+            stackTrace: stackTrace,
+            onReintentar: () =>
+                ref.invalidate(empleadoProvider(widget.employeeId)),
+          ),
           data: (empleado) {
             if (empleado == null) {
-              return const Center(child: Text('Empleado no encontrado.'));
+              return const EmptyState(
+                icono: Icons.person_off_outlined,
+                titulo: 'Empleado no encontrado',
+                descripcion: 'Puede que ya no exista. Vuelve a la lista.',
+              );
             }
             return TabBarView(
               children: [
@@ -140,9 +162,16 @@ class _DetalleTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final formatoFecha = DateFormat('dd/MM/yyyy');
+    final salario = empleado.salario;
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        80,
+      ),
       children: [
         Center(
           child: CircleAvatar(
@@ -164,12 +193,20 @@ class _DetalleTab extends StatelessWidget {
         Center(
           child: Text(
             empleado.nombre,
-            style: Theme.of(context).textTheme.titleLarge,
+            textAlign: TextAlign.center,
+            style: textTheme.titleLarge,
           ),
         ),
+        const SizedBox(height: AppSpacing.xs),
         Center(
-          child: Text(
-            empleado.tipo == TipoEmpleado.ventas ? 'Ventas' : 'Delivery',
+          child: Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.xs,
+            alignment: WrapAlignment.center,
+            children: [
+              EtiquetaTipoEmpleado(empleado.tipo),
+              EtiquetaActivo(activo: empleado.activo),
+            ],
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -186,10 +223,9 @@ class _DetalleTab extends StatelessWidget {
                   'Fecha de ingreso',
                   formatoFecha.format(empleado.fechaIngreso.toLocal()),
                 ),
-                _Fila('Tiempo trabajado', empleado.tiempoTrabajado),
-                _Fila('Salario', empleado.salario?.format() ?? '—'),
+                _Fila('Antigüedad', empleado.tiempoTrabajado),
+                _Fila('Salario', salario == null ? '—' : null, monto: salario),
                 _Fila('Frecuencia de pago', empleado.frecuenciaPago ?? '—'),
-                _Fila('Estado', empleado.activo ? 'Activo' : 'Inactivo'),
               ],
             ),
           ),
@@ -208,27 +244,30 @@ class _DetalleTab extends StatelessWidget {
 }
 
 class _Fila extends StatelessWidget {
-  const _Fila(this.etiqueta, this.valor);
+  const _Fila(this.etiqueta, this.valor, {this.monto});
 
   final String etiqueta;
-  final String valor;
+  final String? valor;
+
+  /// Si se da, se muestra con [MoneyText] en vez de [valor].
+  final Money? monto;
 
   @override
   Widget build(BuildContext context) {
+    final estilo = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(etiqueta, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(width: AppSpacing.md),
           Flexible(
-            child: Text(
-              valor,
-              textAlign: TextAlign.right,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
+            child: monto != null
+                ? MoneyText(monto!, textAlign: TextAlign.right, style: estilo)
+                : Text(valor ?? '—', textAlign: TextAlign.right, style: estilo),
           ),
         ],
       ),
@@ -254,17 +293,22 @@ class _PagosTab extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Total pagado',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    'Total pagado',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 totalAsync.when(
-                  data: (total) => Text(
-                    total.format(),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
+                  data: (total) => ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: MoneyText(
+                      total,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   loading: () => const SizedBox(
@@ -272,7 +316,7 @@ class _PagosTab extends ConsumerWidget {
                     width: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  error: (_, _) => const Text('--'),
+                  error: (_, _) => const Text('No disponible'),
                 ),
               ],
             ),
@@ -280,13 +324,22 @@ class _PagosTab extends ConsumerWidget {
         ),
         Expanded(
           child: pagosAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) =>
-                const Center(child: Text('No se pudo cargar el historial.')),
+            loading: () => const LoadingView(mensaje: 'Cargando pagos...'),
+            error: (error, stackTrace) => ErrorState(
+              mensaje: 'No se pudo cargar el historial de pagos.',
+              error: error,
+              stackTrace: stackTrace,
+              onReintentar: () =>
+                  ref.invalidate(pagosEmpleadoProvider(empleadoId)),
+            ),
             data: (pagos) {
               if (pagos.isEmpty) {
-                return const Center(
-                  child: Text('Aún no hay pagos registrados.'),
+                return const EmptyState(
+                  icono: Icons.payments_outlined,
+                  titulo: 'Aún no hay pagos registrados',
+                  descripcion:
+                      'Cada pago que registres aparecerá aquí con su fecha y '
+                      'su período. Usa «Registrar pago» para el primero.',
                 );
               }
               return ListView.separated(
@@ -294,7 +347,7 @@ class _PagosTab extends ConsumerWidget {
                   AppSpacing.md,
                   0,
                   AppSpacing.md,
-                  AppSpacing.xl,
+                  80,
                 ),
                 itemCount: pagos.length,
                 separatorBuilder: (_, _) =>
@@ -318,16 +371,47 @@ class _PagoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      child: ListTile(
-        leading: const Icon(Icons.payments_outlined),
-        title: Text(pago.monto.format()),
-        subtitle: Text(
-          '${pago.periodo ?? 'Sin período'}\n'
-          '${formatoFecha.format(pago.fecha.toLocal())} · ${pago.usuarioNombre}'
-          '${pago.saleDeCaja ? ' · Salió de caja' : ''}',
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.payments_outlined, color: scheme.onSurfaceVariant),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MoneyText(
+                    pago.monto,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(pago.periodo ?? 'Sin período'),
+                  Text(
+                    '${formatoFecha.format(pago.fecha.toLocal())} · '
+                    '${pago.usuarioNombre}',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (pago.saleDeCaja) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    const EtiquetaEstado(
+                      icono: Icons.point_of_sale_outlined,
+                      texto: 'Salió de caja',
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-        isThreeLine: true,
       ),
     );
   }

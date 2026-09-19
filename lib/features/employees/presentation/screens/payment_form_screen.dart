@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../cash_register/presentation/providers/cash_register_providers.dart';
 import '../providers/employees_providers.dart';
@@ -30,7 +31,6 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   bool _saleDeCaja = false;
   bool _guardando = false;
   bool _inicializado = false;
-  String? _error;
 
   @override
   void dispose() {
@@ -52,6 +52,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!_formKey.currentState!.validate()) return;
 
     final usuario = ref.read(authControllerProvider).value;
@@ -59,15 +60,14 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       SesionActiva(:final usuario) => usuario.id,
       _ => null,
     };
+    final monto = Money.tryParse(_montoController.text);
+    if (monto == null) return;
     if (usuarioId == null) {
-      setState(() => _error = 'No hay una sesión activa.');
+      AppSnackbar.error(context, 'No hay una sesión activa.');
       return;
     }
 
-    setState(() {
-      _guardando = true;
-      _error = null;
-    });
+    setState(() => _guardando = true);
 
     final periodo = _periodoController.text.trim();
     final resultado = await ref
@@ -75,7 +75,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
         .registrarPago(
           empleadoId: widget.employeeId,
           fecha: _fecha.toUtc(),
-          monto: Money.parse(_montoController.text),
+          monto: monto,
           periodo: periodo.isEmpty ? null : periodo,
           saleDeCaja: _saleDeCaja,
           usuarioId: usuarioId,
@@ -87,9 +87,10 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       ok: (_) {
         ref.invalidate(pagosEmpleadoProvider(widget.employeeId));
         ref.invalidate(totalPagadoProvider(widget.employeeId));
+        AppSnackbar.exito(context, 'Pago registrado.');
         context.pop();
       },
-      fail: (f) => setState(() => _error = f.message),
+      fail: (f) => AppSnackbar.error(context, f.message),
     );
   }
 
@@ -116,6 +117,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: [
+            if (empleadoAsync.value case final empleado?) ...[
+              Text(
+                'Pago a ${empleado.nombre}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Fecha'),
@@ -133,6 +141,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              textInputAction: TextInputAction.next,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
               ],
@@ -153,6 +162,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 labelText: 'Período cubierto (opcional)',
                 hintText: 'ej. 1-15 junio 2026',
               ),
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: AppSpacing.sm),
             SwitchListTile(
@@ -168,13 +179,6 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   ? (valor) => setState(() => _saleDeCaja = valor)
                   : null,
             ),
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
             const SizedBox(height: AppSpacing.lg),
             FilledButton(
               onPressed: _guardando ? null : _guardar,

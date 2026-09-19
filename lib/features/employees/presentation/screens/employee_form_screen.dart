@@ -12,6 +12,7 @@ import '../../../../core/database/enums.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/empleado.dart';
 import '../providers/employees_providers.dart';
@@ -43,7 +44,12 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
   String? _frecuenciaPago;
   bool _guardando = false;
   bool _inicializado = false;
-  String? _error;
+
+  /// Hubo algún cambio del usuario sin guardar (salir pide confirmación).
+  bool _modificado = false;
+
+  /// El guardado terminó: se puede salir sin preguntar.
+  bool _salidaLibre = false;
 
   bool get _esEdicion => widget.employeeId != null;
 
@@ -79,6 +85,24 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
     }
   }
 
+  void _marcarModificado() {
+    if (!_modificado) setState(() => _modificado = true);
+  }
+
+  Future<void> _confirmarSalida() async {
+    final descartar = await mostrarConfirmacion(
+      context,
+      titulo: '¿Descartar cambios?',
+      mensaje: 'Tienes datos sin guardar. Si sales ahora, se pierden.',
+      confirmarLabel: 'Descartar',
+      cancelarLabel: 'Seguir editando',
+      destructivo: true,
+    );
+    if (!descartar || !mounted) return;
+    setState(() => _salidaLibre = true);
+    context.pop();
+  }
+
   Future<String> _guardarFoto(XFile archivo) async {
     final docs = await getApplicationDocumentsDirectory();
     final carpeta = Directory('${docs.path}/empleados');
@@ -101,7 +125,10 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
     if (archivo == null) return;
     final ruta = await _guardarFoto(archivo);
     if (!mounted) return;
-    setState(() => _fotoPath = ruta);
+    setState(() {
+      _fotoPath = ruta;
+      _modificado = true;
+    });
   }
 
   Future<void> _elegirFecha() async {
@@ -113,10 +140,14 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
       lastDate: ahora,
     );
     if (fecha == null) return;
-    setState(() => _fechaIngreso = fecha);
+    setState(() {
+      _fechaIngreso = fecha;
+      _modificado = true;
+    });
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!_formKey.currentState!.validate()) return;
 
     final usuario = ref.read(authControllerProvider).value;
@@ -125,20 +156,15 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
       _ => null,
     };
     if (usuarioId == null) {
-      setState(() => _error = 'No hay una sesión activa.');
+      AppSnackbar.error(context, 'No hay una sesión activa.');
       return;
     }
 
-    setState(() {
-      _guardando = true;
-      _error = null;
-    });
+    setState(() => _guardando = true);
 
     final repo = ref.read(employeesRepositoryProvider);
     final salarioTexto = _salarioController.text.trim();
-    final salario = salarioTexto.isEmpty
-        ? null
-        : Money.tryParse(salarioTexto);
+    final salario = salarioTexto.isEmpty ? null : Money.tryParse(salarioTexto);
     final cedula = _cedulaController.text.trim();
     final direccion = _direccionController.text.trim();
     final telefono = _telefonoController.text.trim();
@@ -175,9 +201,11 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
     resultado.when(
       ok: (_) {
         if (_esEdicion) ref.invalidate(empleadoProvider(widget.employeeId!));
+        AppSnackbar.exito(context, 'Empleado guardado.');
+        setState(() => _salidaLibre = true);
         context.pop();
       },
-      fail: (f) => setState(() => _error = f.message),
+      fail: (f) => AppSnackbar.error(context, f.message),
     );
   }
 
@@ -191,17 +219,27 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
       return empleadoAsync.when(
         loading: () => Scaffold(
           appBar: AppBar(title: const Text('Editar empleado')),
-          body: const Center(child: CircularProgressIndicator()),
+          body: const LoadingView(mensaje: 'Cargando empleado...'),
         ),
-        error: (_, _) => Scaffold(
+        error: (error, stackTrace) => Scaffold(
           appBar: AppBar(title: const Text('Editar empleado')),
-          body: const Center(child: Text('No se pudo cargar el empleado.')),
+          body: ErrorState(
+            mensaje: 'No se pudo cargar el empleado.',
+            error: error,
+            stackTrace: stackTrace,
+            onReintentar: () =>
+                ref.invalidate(empleadoProvider(widget.employeeId!)),
+          ),
         ),
         data: (empleado) {
           if (empleado == null) {
             return Scaffold(
               appBar: AppBar(title: const Text('Editar empleado')),
-              body: const Center(child: Text('Empleado no encontrado.')),
+              body: const EmptyState(
+                icono: Icons.person_off_outlined,
+                titulo: 'Empleado no encontrado',
+                descripcion: 'Puede que ya no exista. Vuelve a la lista.',
+              ),
             );
           }
           _cargarDatos(empleado);
@@ -215,139 +253,163 @@ class _EmployeeFormScreenState extends ConsumerState<EmployeeFormScreen> {
   Widget _buildForm(BuildContext context) {
     final formatoFecha = DateFormat('dd/MM/yyyy');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_esEdicion ? 'Editar empleado' : 'Nuevo empleado'),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            _FotoPicker(
-              rutaFoto: _fotoPath,
-              onTomarFoto: () => _elegirFoto(ImageSource.camera),
-              onElegirGaleria: () => _elegirFoto(ImageSource.gallery),
-              onQuitar: () => setState(() => _fotoPath = null),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SegmentedButton<TipoEmpleado>(
-              segments: const [
-                ButtonSegment(
-                  value: TipoEmpleado.ventas,
-                  label: Text('Ventas'),
-                ),
-                ButtonSegment(
-                  value: TipoEmpleado.delivery,
-                  label: Text('Delivery'),
-                ),
-              ],
-              selected: {_tipo},
-              onSelectionChanged: (seleccion) =>
-                  setState(() => _tipo = seleccion.first),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _nombreController,
-              decoration: const InputDecoration(labelText: 'Nombre'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _cedulaController,
-              decoration: const InputDecoration(
-                labelText: 'Cédula (opcional)',
-                hintText: '000-0000000-0',
+    return PopScope(
+      canPop: _salidaLibre || !_modificado,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmarSalida();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_esEdicion ? 'Editar empleado' : 'Nuevo empleado'),
+        ),
+        body: Form(
+          key: _formKey,
+          onChanged: _marcarModificado,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: [
+              _FotoPicker(
+                rutaFoto: _fotoPath,
+                onTomarFoto: () => _elegirFoto(ImageSource.camera),
+                onElegirGaleria: () => _elegirFoto(ImageSource.gallery),
+                onQuitar: () => setState(() => _fotoPath = null),
               ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return null;
-                if (!formatoCedulaRD.hasMatch(v.trim())) {
-                  return 'Formato 000-0000000-0';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _direccionController,
-              decoration: const InputDecoration(
-                labelText: 'Dirección (opcional)',
+              const SizedBox(height: AppSpacing.md),
+              SegmentedButton<TipoEmpleado>(
+                segments: const [
+                  ButtonSegment(
+                    value: TipoEmpleado.ventas,
+                    label: Text('Ventas'),
+                  ),
+                  ButtonSegment(
+                    value: TipoEmpleado.delivery,
+                    label: Text('Delivery'),
+                  ),
+                ],
+                selected: {_tipo},
+                onSelectionChanged: (seleccion) => setState(() {
+                  _tipo = seleccion.first;
+                  _modificado = true;
+                }),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _telefonoController,
-              decoration: const InputDecoration(
-                labelText: 'Teléfono (opcional)',
-              ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Fecha de ingreso'),
-              subtitle: Text(formatoFecha.format(_fechaIngreso)),
-              trailing: const Icon(Icons.calendar_today_outlined),
-              onTap: _elegirFecha,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _salarioController,
-              decoration: const InputDecoration(
-                labelText: 'Salario (opcional)',
-                prefixText: 'RD\$ ',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return null;
-                final monto = Money.tryParse(v);
-                if (monto == null || monto.isNegative) {
-                  return 'Monto inválido';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            DropdownButtonFormField<String?>(
-              initialValue: _frecuenciaPago,
-              decoration: const InputDecoration(
-                labelText: 'Frecuencia de pago (opcional)',
-              ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Sin definir')),
-                for (final frecuencia in frecuenciasPagoPredefinidas)
-                  DropdownMenuItem(value: frecuencia, child: Text(frecuencia)),
-              ],
-              onChanged: (valor) => setState(() => _frecuenciaPago = valor),
-            ),
-            if (_error != null) ...[
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              TextFormField(
+                controller: _nombreController,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+                keyboardType: TextInputType.name,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Escribe el nombre del empleado'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _cedulaController,
+                decoration: const InputDecoration(
+                  labelText: 'Cédula (opcional)',
+                  hintText: '000-0000000-0',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  signed: true,
+                ),
+                textInputAction: TextInputAction.next,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  if (!formatoCedulaRD.hasMatch(v.trim())) {
+                    return 'Formato 000-0000000-0';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _direccionController,
+                decoration: const InputDecoration(
+                  labelText: 'Dirección (opcional)',
+                ),
+                keyboardType: TextInputType.streetAddress,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _telefonoController,
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono (opcional)',
+                ),
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Fecha de ingreso'),
+                subtitle: Text(formatoFecha.format(_fechaIngreso)),
+                trailing: const Icon(Icons.calendar_today_outlined),
+                onTap: _elegirFecha,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _salarioController,
+                decoration: const InputDecoration(
+                  labelText: 'Salario (opcional)',
+                  prefixText: 'RD\$ ',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.done,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  final monto = Money.tryParse(v);
+                  if (monto == null || monto.isNegative) {
+                    return 'Monto inválido';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              DropdownButtonFormField<String?>(
+                initialValue: _frecuenciaPago,
+                decoration: const InputDecoration(
+                  labelText: 'Frecuencia de pago (opcional)',
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('Sin definir'),
+                  ),
+                  for (final frecuencia in frecuenciasPagoPredefinidas)
+                    DropdownMenuItem(
+                      value: frecuencia,
+                      child: Text(frecuencia),
+                    ),
+                ],
+                onChanged: (valor) => setState(() {
+                  _frecuenciaPago = valor;
+                  _modificado = true;
+                }),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton(
+                onPressed: _guardando ? null : _guardar,
+                child: _guardando
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Guardar'),
               ),
             ],
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton(
-              onPressed: _guardando ? null : _guardar,
-              child: _guardando
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Guardar'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -383,6 +445,7 @@ class _FotoPicker extends StatelessWidget {
                   bottom: 0,
                   right: 0,
                   child: IconButton.filledTonal(
+                    tooltip: 'Quitar foto',
                     onPressed: onQuitar,
                     icon: const Icon(Icons.close),
                   ),

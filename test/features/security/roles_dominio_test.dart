@@ -6,6 +6,9 @@ import 'package:app_gestion/features/cash_register/data/datasources/cash_registe
 import 'package:app_gestion/features/cash_register/data/repositories/cash_register_repository_impl.dart';
 import 'package:app_gestion/features/inventory/data/datasources/inventory_local_datasource.dart';
 import 'package:app_gestion/features/inventory/data/repositories/inventory_repository_impl.dart';
+import 'package:app_gestion/features/purchases/data/datasources/purchases_local_datasource.dart';
+import 'package:app_gestion/features/purchases/data/repositories/purchases_repository_impl.dart';
+import 'package:app_gestion/features/purchases/domain/entities/compra.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -154,6 +157,106 @@ void main() {
 
       expect(r.isOk, isTrue);
       expect(await stock(), 95);
+    });
+  });
+  group('administrador DESACTIVADO (rol administrador, activo = false)', () {
+    late String adminInactivoId;
+
+    setUp(() async {
+      final negocio = await f.db.select(f.db.negocios).getSingle();
+      adminInactivoId = generateUuidV4();
+      await f.db
+          .into(f.db.usuarios)
+          .insert(
+            UsuariosCompanion.insert(
+              id: Value(adminInactivoId),
+              negocioId: negocio.id,
+              nombre: 'Admin baja',
+              username: 'admin.baja',
+              passwordHash: 'hash',
+              salt: 'salt',
+              rol: RolUsuario.administrador,
+              activo: const Value(false),
+            ),
+          );
+    });
+
+    test('NO puede anular una venta', () async {
+      await f.abrirCaja();
+      final ventaId = (await f.vender(cantidad: 2)).valueOrNull!;
+      final antes = await escrituras();
+
+      final r = await f.ventas.anularVenta(ventaId, usuarioId: adminInactivoId);
+
+      expect(_fallo(r), isA<PermissionFailure>());
+      expect(_fallo(r)!.message, 'Solo el administrador puede anular ventas.');
+      expect(await escrituras(), antes);
+      expect(
+        (await f.ventas.obtenerVenta(ventaId))!.estado,
+        EstadoVenta.completada,
+      );
+    });
+
+    test('NO puede anular una compra', () async {
+      final compras = PurchasesRepositoryImpl(PurchasesLocalDatasource(f.db));
+      final compraId = (await compras.registrarCompra(
+        items: [
+          ItemCompraInput(
+            productoId: f.productoId,
+            productoNombre: 'Salami',
+            cantidad: 5,
+            costoUnitario: const Money(10000),
+          ),
+        ],
+        pagadaDeCaja: false,
+        usuarioId: f.usuarioId,
+      )).valueOrNull!;
+      final antes = await escrituras();
+
+      final r = await compras.anularCompra(
+        compraId,
+        usuarioId: adminInactivoId,
+      );
+
+      expect(_fallo(r), isA<PermissionFailure>());
+      expect(_fallo(r)!.message, 'Solo el administrador puede anular compras.');
+      expect(await escrituras(), antes);
+      expect(await stock(), 105);
+    });
+
+    test('NO puede cerrar la caja', () async {
+      await f.abrirCaja(const Money(50000));
+      final antes = await escrituras();
+
+      final r = await caja.cerrarCaja(
+        montoContado: const Money(50000),
+        montoDejarSiguiente: const Money(10000),
+        usuarioId: adminInactivoId,
+      );
+
+      expect(_fallo(r), isA<PermissionFailure>());
+      expect(_fallo(r)!.message, 'Solo el administrador puede cerrar la caja.');
+      expect(await escrituras(), antes);
+      expect(await caja.watchSesionActual().first, isNotNull);
+    });
+
+    test('NO puede ajustar el stock', () async {
+      final antes = await escrituras();
+
+      final r = await inventario.ajusteManual(
+        productoId: f.productoId,
+        cantidad: -5,
+        motivo: 'Merma',
+        usuarioId: adminInactivoId,
+      );
+
+      expect(_fallo(r), isA<PermissionFailure>());
+      expect(
+        _fallo(r)!.message,
+        'Solo el administrador puede ajustar el inventario.',
+      );
+      expect(await escrituras(), antes);
+      expect(await stock(), 100);
     });
   });
 }

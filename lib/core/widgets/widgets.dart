@@ -6,5 +6,6 @@ export 'app_states.dart';
 export 'confirm_dialog.dart';
 export 'encabezado_dia.dart';
 export 'etiqueta_anulada.dart';
+export 'etiqueta_estado.dart';
 export 'filtro_fecha_chip.dart';
 export 'money_text.dart';

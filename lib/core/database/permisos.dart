@@ -8,7 +8,8 @@ class SinPermisoException implements Exception {
   const SinPermisoException();
 }
 
-/// `true` si [usuarioId] existe y su rol guardado es Administrador.
+/// `true` si [usuarioId] existe, está ACTIVO y su rol guardado es
+/// Administrador. Un administrador dado de baja pierde todo permiso.
 ///
 /// Defensa en profundidad: la UI ya oculta las acciones solo-Administrador,
 /// pero el dominio no debe fiarse de eso. Se lee el rol de la BASE (no el que
@@ -18,7 +19,9 @@ Future<bool> esAdministrador(AppDatabase db, String usuarioId) async {
   final usuario = await (db.select(
     db.usuarios,
   )..where((t) => t.id.equals(usuarioId))).getSingleOrNull();
-  return usuario != null && usuario.rol == RolUsuario.administrador;
+  return usuario != null &&
+      usuario.activo &&
+      usuario.rol == RolUsuario.administrador;
 }
 
 /// Lanza [SinPermisoException] si [usuarioId] no es Administrador.

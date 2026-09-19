@@ -1,7 +1,10 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../domain/entities/producto.dart';
 import '../providers/products_providers.dart';
 
@@ -17,29 +20,29 @@ class CategoriasManagementScreen extends ConsumerStatefulWidget {
 
 class _CategoriasManagementScreenState
     extends ConsumerState<CategoriasManagementScreen> {
-  void _mostrarError(String mensaje) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Theme.of(context).colorScheme.error,
-      ),
-    );
-  }
+  bool _procesando = false;
 
   Future<void> _crear() async {
+    if (_procesando) return;
     final nombre = await showDialog<String>(
       context: context,
       builder: (_) => const _CategoriaDialog(titulo: 'Nueva categoría'),
     );
-    if (nombre == null) return;
+    if (nombre == null || !mounted) return;
+    setState(() => _procesando = true);
     final resultado = await ref
         .read(productsRepositoryProvider)
         .crearCategoria(nombre);
-    resultado.when(ok: (_) {}, fail: (f) => _mostrarError(f.message));
+    if (!mounted) return;
+    setState(() => _procesando = false);
+    resultado.when(
+      ok: (_) => AppSnackbar.exito(context, 'Categoría creada.'),
+      fail: (f) => AppSnackbar.error(context, f.message),
+    );
   }
 
   Future<void> _renombrar(Categoria categoria) async {
+    if (_procesando) return;
     final nombre = await showDialog<String>(
       context: context,
       builder: (_) => _CategoriaDialog(
@@ -47,58 +50,101 @@ class _CategoriasManagementScreenState
         valorInicial: categoria.nombre,
       ),
     );
-    if (nombre == null) return;
+    if (nombre == null || !mounted) return;
+    setState(() => _procesando = true);
     final resultado = await ref
         .read(productsRepositoryProvider)
         .renombrarCategoria(id: categoria.id, nombre: nombre);
-    resultado.when(ok: (_) {}, fail: (f) => _mostrarError(f.message));
+    if (!mounted) return;
+    setState(() => _procesando = false);
+    resultado.when(
+      ok: (_) => AppSnackbar.exito(context, 'Categoría renombrada.'),
+      fail: (f) => AppSnackbar.error(context, f.message),
+    );
   }
 
   Future<void> _eliminar(Categoria categoria) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Eliminar categoría'),
-        content: Text(
-          '¿Eliminar "${categoria.nombre}"? Los productos que la tengan '
-          'asignada conservarán la referencia.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    if (_procesando) return;
+    final confirmar = await mostrarConfirmacion(
+      context,
+      titulo: '¿Eliminar la categoría "${categoria.nombre}"?',
+      mensaje:
+          'Los productos que la tengan asignada conservarán la referencia. '
+          'Esta acción no se puede deshacer.',
+      confirmarLabel: 'Eliminar',
+      destructivo: true,
     );
-    if (confirmar != true) return;
-    await ref.read(productsRepositoryProvider).eliminarCategoria(categoria.id);
+    if (!confirmar || !mounted) return;
+    setState(() => _procesando = true);
+    String? error;
+    try {
+      final resultado = await ref
+          .read(productsRepositoryProvider)
+          .eliminarCategoria(categoria.id);
+      error = resultado.when(ok: (_) => null, fail: (f) => f.message);
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo eliminar la categoría',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      error = 'No se pudo eliminar la categoría. Inténtalo de nuevo.';
+    }
+    if (!mounted) return;
+    setState(() => _procesando = false);
+    if (error == null) {
+      AppSnackbar.exito(context, 'Categoría "${categoria.nombre}" eliminada.');
+    } else {
+      AppSnackbar.error(context, error);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final categoriasAsync = ref.watch(categoriasProvider);
+    final vacia = categoriasAsync.maybeWhen(
+      data: (c) => c.isEmpty,
+      orElse: () => false,
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Categorías')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _crear,
-        icon: const Icon(Icons.add),
-        label: const Text('Categoría'),
-      ),
+      floatingActionButton: vacia
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: null,
+              onPressed: _procesando ? null : _crear,
+              icon: const Icon(Icons.add),
+              label: const Text('Categoría'),
+            ),
       body: categoriasAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text('No se pudieron cargar las categorías.')),
+        loading: () => const LoadingView(mensaje: 'Cargando categorías...'),
+        error: (error, stackTrace) => ErrorState(
+          mensaje: 'No se pudieron cargar las categorías.',
+          error: error,
+          stackTrace: stackTrace,
+          onReintentar: () => ref.invalidate(categoriasProvider),
+        ),
         data: (categorias) {
           if (categorias.isEmpty) {
-            return const Center(child: Text('Aún no hay categorías.'));
+            return EmptyState(
+              icono: Icons.category_outlined,
+              titulo: 'Aún no hay categorías',
+              descripcion:
+                  'Agrupa tus productos (bebidas, granos, limpieza...) para '
+                  'encontrarlos y filtrarlos más rápido.',
+              accionLabel: 'Crear categoría',
+              accionPrimaria: true,
+              onAccion: _crear,
+            );
           }
           return ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              80,
+            ),
             itemCount: categorias.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, i) {
@@ -107,6 +153,7 @@ class _CategoriasManagementScreenState
                 child: ListTile(
                   title: Text(categoria.nombre),
                   trailing: PopupMenuButton<String>(
+                    tooltip: 'Acciones de ${categoria.nombre}',
                     onSelected: (accion) {
                       switch (accion) {
                         case 'renombrar':
@@ -154,6 +201,11 @@ class _CategoriaDialogState extends State<_CategoriaDialog> {
     super.dispose();
   }
 
+  void _guardar() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(_controller.text);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -164,8 +216,12 @@ class _CategoriaDialogState extends State<_CategoriaDialog> {
           controller: _controller,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Nombre'),
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
+          textCapitalization: TextCapitalization.sentences,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _guardar(),
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? 'Escribe el nombre de la categoría'
+              : null,
         ),
       ),
       actions: [
@@ -173,13 +229,7 @@ class _CategoriaDialogState extends State<_CategoriaDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-            Navigator.of(context).pop(_controller.text);
-          },
-          child: const Text('Guardar'),
-        ),
+        FilledButton(onPressed: _guardar, child: const Text('Guardar')),
       ],
     );
   }

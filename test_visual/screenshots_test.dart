@@ -430,6 +430,108 @@ void main() {
     );
   });
 
+  testWidgets('teléfono · administrador · empleados, usuarios y categorías', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · empleados, usuarios y categorías',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        // Empleados: lista de Ventas, lista de Delivery (con un inactivo),
+        // detalle con antigüedad y pestaña de pagos.
+        await sesion.ir('/empleados', apilar: true);
+        await sesion.capturar('admin_empleados_lista');
+        await sesion.tocarTexto('Delivery');
+        await sesion.capturar('admin_empleados_delivery');
+        await sesion.tocarTexto('Ventas');
+        await sesion.tocarTexto('Ana Ventura');
+        await sesion.capturar('admin_empleado_detalle');
+        await sesion.tocarTexto('Pagos');
+        await sesion.capturar('admin_empleado_pagos');
+        await sesion.tocarTexto('Registrar pago');
+        await sesion.capturar('admin_empleado_pago_formulario');
+        await sesion.atras();
+        await sesion.atras();
+
+        // Formulario de empleado: salir con cambios pide confirmar.
+        await sesion.ir('/empleados/nuevo', apilar: true);
+        await sesion.escribir('Nombre', 'Juan Reyes');
+        await sesion.capturar('admin_empleado_formulario');
+        await sesion.atras();
+        await sesion.capturar('admin_empleado_descartar');
+        await sesion.tocarTexto('Descartar');
+
+        // Usuarios: roles y estados, nuevo cajero y desactivar al único admin.
+        await sesion.ir('/usuarios', apilar: true);
+        await sesion.capturar('admin_usuarios');
+        await sesion.tocarTexto('Nuevo cajero');
+        await sesion.escribir('Nombre', 'Carlos Cajero');
+        await sesion.escribir('Usuario', 'carlos');
+        await sesion.escribir('Contraseña', 'clave123');
+        await sesion.tocarTooltip('Mostrar contraseña');
+        await sesion.capturar('admin_usuarios_nuevo_cajero');
+        await sesion.tocarTexto('Cancelar');
+        await sesion.tocarTooltip('Acciones de Carmen Rodríguez');
+        await sesion.tocarTexto('Desactivar');
+        await sesion.capturar('admin_usuarios_desactivar_confirmar');
+        await sesion.tocarTexto('Desactivar');
+        await sesion.capturar('admin_usuarios_unico_admin');
+
+        // Categorías: lista y confirmación destructiva de eliminar.
+        await sesion.ir('/productos/categorias', apilar: true);
+        await sesion.capturar('admin_categorias');
+        await sesion.tocarTooltip('Acciones de Limpieza');
+        await sesion.tocarTexto('Eliminar');
+        await sesion.capturar('admin_categorias_eliminar');
+        await sesion.tocarTexto('Cancelar');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · formulario de producto y ajuste', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · formulario de producto y ajuste',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        // Formulario de producto (admin): unidad con sugerencias y margen
+        // en vivo; luego un precio por debajo del costo.
+        await sesion.ir('/productos/nuevo', apilar: true);
+        await sesion.capturar('admin_producto_formulario_vacio');
+        await sesion.escribir('Nombre', 'Yuca');
+        await sesion.tocarTexto('libra');
+        await sesion.escribir('Precio de compra', '20');
+        await sesion.escribir('Precio de venta', '35');
+        await sesion.capturar('admin_producto_formulario_margen');
+        await sesion.escribir('Precio de venta', '15');
+        await sesion.capturar('admin_producto_formulario_bajo_costo');
+        await sesion.atras();
+        await sesion.tocarTexto('Descartar');
+
+        // Ajuste de stock: salida con "quedará Y", motivo con chips.
+        await sesion.ir('/productos');
+        await sesion.tocarTexto('Arroz selecto');
+        await sesion.tocarTexto('Ajustar stock');
+        await sesion.capturar('admin_ajuste_stock');
+        await sesion.tocarTexto('Salida');
+        await sesion.escribir('Cantidad', '8.5');
+        await sesion.tocarTexto('Merma');
+        await sesion.capturar('admin_ajuste_stock_salida');
+        await sesion.escribir('Cantidad', '500');
+        await sesion.capturar('admin_ajuste_stock_negativo');
+      },
+    );
+  });
+
   // Al final a propósito: un desmontaje abortado deja observers huérfanos que
   // no deben contaminar a otros escenarios.
   testWidgets('teléfono · administrador · pantallas apiladas', (tester) async {

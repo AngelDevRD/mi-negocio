@@ -12,6 +12,8 @@ import 'package:app_gestion/features/cash_register/data/datasources/cash_registe
 import 'package:app_gestion/features/cash_register/data/repositories/cash_register_repository_impl.dart';
 import 'package:app_gestion/features/customers/data/datasources/customers_local_datasource.dart';
 import 'package:app_gestion/features/customers/data/repositories/customers_repository_impl.dart';
+import 'package:app_gestion/features/employees/data/datasources/employees_local_datasource.dart';
+import 'package:app_gestion/features/employees/data/repositories/employees_repository_impl.dart';
 import 'package:app_gestion/features/expenses/data/datasources/expenses_local_datasource.dart';
 import 'package:app_gestion/features/expenses/data/repositories/expenses_repository_impl.dart';
 import 'package:app_gestion/features/license/domain/entities/licencia.dart';
@@ -288,15 +290,7 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
     36,
     12,
   );
-  final agua = await producto(
-    'Agua 500 ml',
-    bebidas,
-    'unidad',
-    12,
-    20,
-    96,
-    24,
-  );
+  final agua = await producto('Agua 500 ml', bebidas, 'unidad', 12, 20, 96, 24);
   final cerveza = await producto(
     'Cerveza Presidente grande',
     bebidas,
@@ -343,7 +337,10 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   // Ventas de hoy.
   await vender([item(arroz, 5), item(habichuelas, 3)]);
   await vender([item(refresco, 2), item(pan, 4)]);
-  await vender([item(salami, 1.5), item(huevos, 12)], tipo: TipoVenta.detallada);
+  await vender([
+    item(salami, 1.5),
+    item(huevos, 12),
+  ], tipo: TipoVenta.detallada);
   // Una venta anulada (sale con su etiqueta en el historial).
   final fiesta = await vender([item(cerveza, 6)], nota: 'Pedido para fiesta');
   await ventas.anularVenta(fiesta, usuarioId: usuarioId);
@@ -354,7 +351,9 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   Future<void> venderHaceDias(int dias, List<ItemVentaInput> items) async {
     final id = await vender(items);
     await (db.update(db.ventas)..where((t) => t.id.equals(id))).write(
-      VentasCompanion(fecha: Value(ahora.subtract(Duration(days: dias)).toUtc())),
+      VentasCompanion(
+        fecha: Value(ahora.subtract(Duration(days: dias)).toUtc()),
+      ),
     );
   }
 
@@ -508,6 +507,83 @@ Future<void> _sembrarMovimientos(AppDatabase db, String usuarioId) async {
   await gasto('Alquiler', 'Local de la esquina', 1800);
   await gasto('Agua', 'Botellones de agua', 250, deCaja: true);
   await gasto('Otros', 'Reparación de nevera', 1200);
+
+  // Empleados: dos de ventas (uno con pagos) y un delivery inactivo. Los pagos
+  // NO salen de caja: así no cambian los totales de las demás capturas.
+  final empleados = EmployeesRepositoryImpl(EmployeesLocalDatasource(db));
+  Future<String> empleado(
+    String nombre,
+    TipoEmpleado tipo,
+    double salario,
+    String frecuencia,
+    int mesesDeAntiguedad, {
+    String? cedula,
+    String? telefono,
+  }) async => (await empleados.crearEmpleado(
+    tipo: tipo,
+    nombre: nombre,
+    cedula: cedula,
+    telefono: telefono,
+    fechaIngreso: DateTime(
+      ahora.year,
+      ahora.month - mesesDeAntiguedad,
+      10,
+    ).toUtc(),
+    salario: Money.fromPesos(salario),
+    frecuenciaPago: frecuencia,
+    usuarioId: usuarioId,
+  )).valueOrNull!;
+
+  final ana = await empleado(
+    'Ana Ventura',
+    TipoEmpleado.ventas,
+    18000,
+    'Quincenal',
+    15,
+    cedula: '001-1234567-8',
+    telefono: '809-555-0111',
+  );
+  await empleado('Luisa Polanco', TipoEmpleado.ventas, 15000, 'Mensual', 3);
+  final pedro = await empleado(
+    'Pedro Almonte',
+    TipoEmpleado.delivery,
+    12000,
+    'Semanal',
+    26,
+  );
+  await empleados.establecerActivo(
+    id: pedro,
+    activo: false,
+    usuarioId: usuarioId,
+  );
+  for (final (dias, periodo) in [
+    (3, '1-15 del mes'),
+    (18, '16-30 del mes anterior'),
+  ]) {
+    await empleados.registrarPago(
+      empleadoId: ana,
+      fecha: ahora.subtract(Duration(days: dias)).toUtc(),
+      monto: Money.fromPesos(9000),
+      periodo: periodo,
+      saleDeCaja: false,
+      usuarioId: usuarioId,
+    );
+  }
+
+  // Un cajero dado de baja (aparece "Inactivo" en Usuarios).
+  await db
+      .into(db.usuarios)
+      .insert(
+        UsuariosCompanion.insert(
+          negocioId: (await db.select(db.negocios).getSingle()).id,
+          nombre: 'Rosa Gómez',
+          username: 'rosa',
+          passwordHash: 'hash-demo',
+          salt: 'salt-demo',
+          rol: RolUsuario.cajero,
+          activo: const Value(false),
+        ),
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -652,6 +728,18 @@ class SesionVisual {
       );
     }
     await _tester.tap(buscado.first);
+    await estabilizar(_tester);
+  }
+
+  /// Toca el widget con el tooltip [tooltip] (botones de ícono, menús).
+  Future<void> tocarTooltip(String tooltip) async {
+    await _tester.tap(find.byTooltip(tooltip).first);
+    await estabilizar(_tester);
+  }
+
+  /// Toca la flecha "volver" de la barra superior.
+  Future<void> atras() async {
+    await _tester.tap(find.byType(BackButton).first);
     await estabilizar(_tester);
   }
 
