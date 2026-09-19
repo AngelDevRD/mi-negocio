@@ -95,113 +95,163 @@ class _CashRegisterCloseScreenState
           // no debe lanzar por eso; el validator ya muestra el error.
           final montoContado = Money.tryParse(_montoContadoController.text);
 
+          // Lista desplazable ARRIBA; la diferencia y "Confirmar cierre" quedan
+          // fijas ABAJO: el cajero ve siempre si falta o sobra antes de
+          // confirmar, aunque el resumen del turno sea largo. Se usa un
+          // SingleChildScrollView (no ListView) para que los campos sigan
+          // montados —y validables— al desplazarse.
           return Form(
             key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
               children: [
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
+                Expanded(
+                  child: SingleChildScrollView(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Monto esperado en caja'),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          montoEsperado.format(),
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'Apertura ${sesion.montoApertura.format()} + '
-                          'movimientos del día',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.outline,
+                        Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Monto esperado en caja'),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  montoEsperado.format(),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  'Apertura ${sesion.montoApertura.format()} + '
+                                  'movimientos del día',
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        ResumenTurnoSeccion(sesionId: sesion.id),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _montoContadoController,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Monto contado en caja',
+                            prefixText: 'RD\$ ',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.,]'),
+                            ),
+                          ],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Obligatorio';
+                            }
+                            final monto = Money.tryParse(v);
+                            if (monto == null || monto.isNegative) {
+                              return 'Monto inválido';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        TextFormField(
+                          controller: _montoDejarController,
+                          decoration: const InputDecoration(
+                            labelText: 'Monto a dejar para mañana',
+                            prefixText: 'RD\$ ',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.,]'),
+                            ),
+                          ],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Obligatorio';
+                            }
+                            final monto = Money.tryParse(v);
+                            if (monto == null || monto.isNegative) {
+                              return 'Monto inválido';
+                            }
+                            if (montoContado != null && monto > montoContado) {
+                              return 'No puede ser mayor que el monto contado';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) => setState(() {}),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                ResumenTurnoSeccion(sesionId: sesion.id),
-                const SizedBox(height: AppSpacing.md),
-                TextFormField(
-                  controller: _montoContadoController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Monto contado en caja',
-                    prefixText: 'RD\$ ',
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                  ],
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                    final monto = Money.tryParse(v);
-                    if (monto == null || monto.isNegative) {
-                      return 'Monto inválido';
-                    }
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                TextFormField(
-                  controller: _montoDejarController,
-                  decoration: const InputDecoration(
-                    labelText: 'Monto a dejar para mañana',
-                    prefixText: 'RD\$ ',
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                  ],
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Obligatorio';
-                    final monto = Money.tryParse(v);
-                    if (monto == null || monto.isNegative) {
-                      return 'Monto inválido';
-                    }
-                    if (montoContado != null && monto > montoContado) {
-                      return 'No puede ser mayor que el monto contado';
-                    }
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (montoContado != null)
-                  _ResumenCierre(
-                    montoEsperado: montoEsperado,
-                    montoContado: montoContado,
-                  ),
-                if (_error != null) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                // Barra inferior fija.
+                Material(
+                  elevation: 3,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        AppSpacing.sm,
+                        AppSpacing.md,
+                        AppSpacing.md,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (montoContado != null)
+                            _ResumenCierre(
+                              montoEsperado: montoEsperado,
+                              montoContado: montoContado,
+                            ),
+                          if (_error != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.sm),
+                          FilledButton(
+                            onPressed: _guardando
+                                ? null
+                                : () => _cerrar(montoEsperado),
+                            child: _guardando
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Confirmar cierre'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton(
-                  onPressed: _guardando ? null : () => _cerrar(montoEsperado),
-                  child: _guardando
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Confirmar cierre'),
                 ),
               ],
             ),
@@ -233,6 +283,7 @@ class _ResumenCierre extends StatelessWidget {
         : (diferencia.isNegative ? 'Faltante' : 'Sobrante');
 
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(

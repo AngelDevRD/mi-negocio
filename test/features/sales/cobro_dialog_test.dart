@@ -99,15 +99,15 @@ void main() {
     await _abrir(tester, total260);
 
     expect(_chips, findsNWidgets(4));
-    for (final texto in ['Exacto', '500', '1000', '2000']) {
+    for (final texto in ['Exacto', 'RD\$ 500', 'RD\$ 1,000', 'RD\$ 2,000']) {
       expect(find.widgetWithText(ChoiceChip, texto), findsOneWidget);
     }
     // Billetes menores al total no se ofrecen.
-    for (final texto in ['50', '100', '200']) {
+    for (final texto in ['RD\$ 50', 'RD\$ 100', 'RD\$ 200']) {
       expect(find.widgetWithText(ChoiceChip, texto), findsNothing);
     }
 
-    await tester.tap(find.widgetWithText(ChoiceChip, '500'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'RD\$ 500'));
     await tester.pump();
 
     expect(_campo(tester).text, '500.00');
@@ -145,8 +145,8 @@ void main() {
     await _abrir(tester, const Money(50000));
 
     expect(find.widgetWithText(ChoiceChip, 'Exacto'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '500'), findsNothing);
-    expect(find.widgetWithText(ChoiceChip, '1000'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'RD\$ 500'), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, 'RD\$ 1,000'), findsOneWidget);
   });
 
   testWidgets('monto insuficiente muestra "Faltan RD\$ X" en lugar de "--"', (

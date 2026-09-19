@@ -587,9 +587,19 @@ void main() {
 
       await abrirConfirmacion(tester);
 
+      // El monto lleva espacio duro tras "RD$": no se parte en dos líneas.
       expect(
-        find.textContaining('se devuelven RD\$ 2,400.00 a la caja abierta'),
+        find.textContaining(
+          'se devuelven RD\$\u00A02,400.00 a la caja abierta',
+        ),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining(RegExp(r'RD\$ \d')),
+        ),
+        findsNothing,
       );
     });
 

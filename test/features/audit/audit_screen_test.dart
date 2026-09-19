@@ -387,4 +387,75 @@ void main() {
       expect(repo.consultas.last.limite, 100);
     });
   });
+  group('detalle de la fila (sobre qué trata)', () {
+    test('usa nombre, concepto o motivo si el registro los guardó', () {
+      expect(
+        detalleDeRegistro(
+          _registro(1, modulo: 'empleados', despues: {'nombre': 'Ana Ventura'}),
+        ),
+        'Ana Ventura',
+      );
+      expect(
+        detalleDeRegistro(
+          _registro(
+            2,
+            modulo: 'gastos',
+            despues: {'concepto': 'Factura de luz'},
+          ),
+        ),
+        'Factura de luz',
+      );
+      expect(
+        detalleDeRegistro(
+          _registro(
+            3,
+            modulo: 'caja',
+            despues: {'motivo': 'Pago a Pedro', 'monto': 15000},
+          ),
+        ),
+        r'Pago a Pedro · RD$ 150.00',
+      );
+    });
+
+    test('ventas y compras: el total', () {
+      expect(
+        detalleDeRegistro(
+          _registro(4, modulo: 'ventas', despues: {'total': 21000}),
+        ),
+        r'Total RD$ 210.00',
+      );
+    });
+
+    test('sin nada legible NO inventa: null', () {
+      expect(detalleDeRegistro(_registro(5, modulo: 'empleados')), isNull);
+      expect(
+        detalleDeRegistro(
+          _registro(
+            6,
+            modulo: 'empleados',
+            accion: 'desactivar',
+            despues: {'activo': false},
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        detalleDeRegistro(_registro(7, despues: {'nombre': '  '})),
+        isNull,
+      );
+    });
+
+    testWidgets('la fila muestra el detalle cuando existe', (tester) async {
+      await _montar(
+        tester,
+        _RepoAuditoriaFalso([
+          _registro(1, modulo: 'empleados', despues: {'nombre': 'Ana Ventura'}),
+          _registro(2, modulo: 'empleados', accion: 'desactivar'),
+        ]),
+      );
+
+      expect(find.text('Ana Ventura'), findsOneWidget);
+      expect(find.text('Empleados'), findsNWidgets(2));
+    });
+  });
 }

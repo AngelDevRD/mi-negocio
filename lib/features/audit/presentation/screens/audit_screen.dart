@@ -318,6 +318,7 @@ class _RegistroTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final accion = etiquetaDeAccion(registro.accion);
+    final detalle = detalleDeRegistro(registro);
     final destructiva =
         registro.accion == 'anular' || registro.accion == 'eliminar';
     return Card(
@@ -351,6 +352,15 @@ class _RegistroTile extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (detalle != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        detalle,
+                        style: textTheme.bodyMedium,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '${registro.usuarioNombre} · '

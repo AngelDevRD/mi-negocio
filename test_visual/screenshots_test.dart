@@ -249,7 +249,7 @@ void main() {
         // cambio (RD$ 240) es el dato principal.
         await sesion.tocarTexto('Cobrar');
         await sesion.capturar('pos_cobro');
-        await sesion.tocarTexto('500');
+        await sesion.tocarTexto(r'RD$ 500');
         await sesion.capturar('pos_cobro_cambio');
         await sesion.tocarTexto('Cancelar');
 

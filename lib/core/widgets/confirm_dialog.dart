@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Cambia el espacio de "RD$ 2,960.00" por uno duro: el monto no se parte en
+/// dos líneas ("RD$" arriba, la cifra abajo) al ajustar el texto del diálogo.
+String _montosSinPartir(String mensaje) =>
+    mensaje.replaceAllMapped(RegExp(r'RD\$ (?=-?\d)'), (_) => 'RD\$ ');
+
 /// Diálogo de confirmación genérico para acciones que necesitan un paso
 /// intermedio (eliminar, anular, cerrar). Devuelve `true` solo si el
 /// usuario pulsa el botón de confirmar; `false` si cancela o descarta el
@@ -23,7 +28,7 @@ Future<bool> mostrarConfirmacion(
       // Con mensajes largos (p. ej. lo que pasa al anular) el contenido se desplaza.
       scrollable: true,
       title: Text(titulo),
-      content: Text(mensaje),
+      content: Text(_montosSinPartir(mensaje)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),

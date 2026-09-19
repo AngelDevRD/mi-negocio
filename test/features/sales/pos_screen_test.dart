@@ -1337,6 +1337,13 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Stock bajo: 3'), findsOneWidget);
+      // El nombre largo se limita a 2 líneas con "…" (a 3 líneas desbordaría
+      // la tarjeta a texto 1.6).
+      final nombre = tester.widget<Text>(
+        find.text('Producto con un nombre bastante largo de verdad'),
+      );
+      expect(nombre.maxLines, 2);
+      expect(nombre.overflow, TextOverflow.ellipsis);
     });
   });
 

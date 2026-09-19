@@ -547,6 +547,38 @@ void main() {
       expect(find.text('Sin diferencia'), findsOneWidget);
     });
 
+    testWidgets(
+      'a 320 px la diferencia y "Confirmar cierre" están visibles SIN '
+      'desplazar (barra inferior fija)',
+      (tester) async {
+        final repo = RepoCajaFalso(sesion: _sesion());
+        await _montar(tester, const CashRegisterCloseScreen(), repo);
+        tester.view.physicalSize = const Size(320, 640);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Monto contado en caja'),
+          '950',
+        );
+        await tester.pumpAndSettle();
+
+        for (final finder in [
+          find.text('Faltante'),
+          find.text('RD\$ 50.00'),
+          find.widgetWithText(FilledButton, 'Confirmar cierre'),
+        ]) {
+          expect(finder, findsOneWidget);
+          final rect = tester.getRect(finder);
+          expect(rect.top, greaterThanOrEqualTo(0), reason: '$finder');
+          expect(rect.bottom, lessThanOrEqualTo(640), reason: '$finder');
+        }
+        // Y el formulario sigue validando aunque la lista esté desplazada.
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar cierre'));
+        await tester.pumpAndSettle();
+        expect(find.text('Obligatorio'), findsOneWidget);
+      },
+    );
+
     testWidgets('sin abonos, entradas ni salidas no muestra esas líneas', (
       tester,
     ) async {

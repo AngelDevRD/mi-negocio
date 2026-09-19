@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/database/enums.dart';
 import '../../../../core/errors/result.dart';
@@ -914,6 +915,10 @@ const _metodosDeCobro = [
 /// Billetes dominicanos de referencia para los botones de monto rápido.
 const _billetes = [50, 100, 200, 500, 1000, 2000];
 
+/// Etiqueta de un billete: "RD$ 500", "RD$ 1,000" (pesos enteros, con miles).
+String _etiquetaBillete(Money billete) =>
+    'RD\$ ${NumberFormat('#,##0', 'en_US').format(billete.cents ~/ 100)}';
+
 /// Montos rápidos: los 3 billetes más pequeños MAYORES que el total (uno igual
 /// al total ya lo cubre "Exacto"). Con total sobre el billete mayor: ninguno.
 List<Money> montosRapidos(Money total) => [
@@ -1194,9 +1199,7 @@ class _CobroDialogState extends ConsumerState<CobroDialog> {
                     for (var i = 0; i < montos.length; i++)
                       ChoiceChip(
                         label: Text(
-                          i == 0
-                              ? 'Exacto'
-                              : formatoCantidad(montos[i].cents / 100),
+                          i == 0 ? 'Exacto' : _etiquetaBillete(montos[i]),
                         ),
                         selected: recibido == montos[i],
                         onSelected: (_) => _fijar(montos[i]),
