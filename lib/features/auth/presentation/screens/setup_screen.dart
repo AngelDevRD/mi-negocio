@@ -1,12 +1,20 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../providers/auth_providers.dart';
+
+/// Usuario que se sugiere para el administrador (se puede cambiar).
+const usuarioAdminSugerido = 'admin';
 
 /// Wizard de primer uso (RF-AUTH): datos del negocio + creación del usuario
 /// Administrador. Se muestra una sola vez, justo después de activar la
-/// licencia.
+/// licencia. Solo dos pasos y lo mínimo obligatorio: el nombre del negocio y
+/// la cuenta del administrador; el resto se puede completar después en
+/// "Perfil y suscripción".
 class SetupScreen extends ConsumerStatefulWidget {
   const SetupScreen({super.key});
 
@@ -24,9 +32,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   final _emailController = TextEditingController();
 
   final _nombreAdminController = TextEditingController();
-  final _usernameController = TextEditingController();
+  final _usernameController = TextEditingController(text: usuarioAdminSugerido);
   final _passwordController = TextEditingController();
-  final _confirmarController = TextEditingController();
 
   bool _enviando = false;
 
@@ -40,55 +47,57 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     _nombreAdminController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _confirmarController.dispose();
     super.dispose();
   }
 
+  String? _opcional(TextEditingController c) {
+    final texto = c.text.trim();
+    return texto.isEmpty ? null : texto;
+  }
+
   Future<void> _registrar() async {
+    if (_enviando) return;
     if (!_formKey.currentState!.validate()) return;
-    if (_passwordController.text != _confirmarController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Las contraseñas no coinciden.'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
     setState(() => _enviando = true);
-    final fallo = await ref
-        .read(authControllerProvider.notifier)
-        .registrarNegocioYAdmin(
-          nombreNegocio: _nombreNegocioController.text,
-          identificacion: _identificacionController.text.isEmpty
-              ? null
-              : _identificacionController.text,
-          direccion: _direccionController.text.isEmpty
-              ? null
-              : _direccionController.text,
-          telefono: _telefonoController.text.isEmpty
-              ? null
-              : _telefonoController.text,
-          email: _emailController.text.isEmpty ? null : _emailController.text,
-          nombreAdmin: _nombreAdminController.text,
-          username: _usernameController.text,
-          password: _passwordController.text,
-        );
-    if (!mounted) return;
-    setState(() => _enviando = false);
-    if (fallo != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(fallo.message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+    try {
+      final fallo = await ref
+          .read(authControllerProvider.notifier)
+          .registrarNegocioYAdmin(
+            nombreNegocio: _nombreNegocioController.text,
+            identificacion: _opcional(_identificacionController),
+            direccion: _opcional(_direccionController),
+            telefono: _opcional(_telefonoController),
+            email: _opcional(_emailController),
+            nombreAdmin: _nombreAdminController.text,
+            username: _usernameController.text,
+            password: _passwordController.text,
+          );
+      if (fallo != null && mounted) {
+        AppSnackbar.error(context, fallo.message);
+      }
+    } on Object catch (e, st) {
+      // Nunca se registra la contraseña: solo el error.
+      developer.log(
+        'No se pudo crear el negocio',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
       );
+      if (mounted) {
+        AppSnackbar.error(
+          context,
+          'No se pudo crear el negocio. Inténtalo de nuevo.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Configuración inicial')),
       body: SafeArea(
@@ -102,96 +111,128 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Datos del negocio', style: textTheme.titleLarge),
+                    Text(
+                      'Solo dos pasos y empiezas a vender.',
+                      style: textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text('1. Tu negocio', style: textTheme.titleLarge),
                     const SizedBox(height: AppSpacing.sm),
                     TextFormField(
                       controller: _nombreNegocioController,
                       decoration: const InputDecoration(
                         labelText: 'Nombre del negocio',
                       ),
+                      keyboardType: TextInputType.text,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
                       enabled: !_enviando,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Obligatorio'
+                          ? 'Escribe el nombre de tu negocio'
                           : null,
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      controller: _identificacionController,
-                      decoration: const InputDecoration(
-                        labelText: 'RNC o cédula (opcional)',
+                    const SizedBox(height: AppSpacing.xs),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: EdgeInsets.zero,
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      title: const Text('Más datos del negocio (opcional)'),
+                      subtitle: const Text(
+                        'RNC, dirección, teléfono y email. Los puedes '
+                        'completar después.',
                       ),
-                      enabled: !_enviando,
+                      children: [
+                        TextFormField(
+                          controller: _identificacionController,
+                          decoration: const InputDecoration(
+                            labelText: 'RNC o cédula',
+                          ),
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
+                          enabled: !_enviando,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        TextFormField(
+                          controller: _direccionController,
+                          decoration: const InputDecoration(
+                            labelText: 'Dirección',
+                          ),
+                          keyboardType: TextInputType.streetAddress,
+                          textCapitalization: TextCapitalization.sentences,
+                          textInputAction: TextInputAction.next,
+                          enabled: !_enviando,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        TextFormField(
+                          controller: _telefonoController,
+                          decoration: const InputDecoration(
+                            labelText: 'Teléfono',
+                          ),
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          enabled: !_enviando,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        TextFormField(
+                          controller: _emailController,
+                          decoration: const InputDecoration(labelText: 'Email'),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          enabled: !_enviando,
+                          validator: (v) {
+                            final t = v?.trim() ?? '';
+                            if (t.isEmpty) return null;
+                            return t.contains('@') && t.contains('.')
+                                ? null
+                                : 'Escribe un email válido';
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      controller: _direccionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Dirección (opcional)',
-                      ),
-                      enabled: !_enviando,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      controller: _telefonoController,
-                      decoration: const InputDecoration(
-                        labelText: 'Teléfono (opcional)',
-                      ),
-                      keyboardType: TextInputType.phone,
-                      enabled: !_enviando,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'Email (opcional)',
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      enabled: !_enviando,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Cuenta del administrador',
+                      '2. Tu cuenta de administrador',
                       style: textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextFormField(
                       controller: _nombreAdminController,
                       decoration: const InputDecoration(labelText: 'Tu nombre'),
+                      keyboardType: TextInputType.name,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
                       enabled: !_enviando,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Obligatorio'
+                          ? 'Escribe tu nombre'
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextFormField(
                       controller: _usernameController,
-                      decoration: const InputDecoration(labelText: 'Usuario'),
+                      decoration: const InputDecoration(
+                        labelText: 'Usuario',
+                        helperText: 'Con este nombre inicias sesión',
+                      ),
+                      keyboardType: TextInputType.text,
                       autocorrect: false,
+                      enableSuggestions: false,
+                      textInputAction: TextInputAction.next,
                       enabled: !_enviando,
                       validator: (v) => (v == null || v.trim().length < 3)
                           ? 'Mínimo 3 caracteres'
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
+                    CampoPassword(
                       controller: _passwordController,
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña',
-                      ),
-                      obscureText: true,
+                      label: 'Contraseña',
+                      helperText: 'Mínimo 6 caracteres',
                       enabled: !_enviando,
-                      validator: (v) => (v == null || v.length < 6)
-                          ? 'Mínimo 6 caracteres'
-                          : null,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      controller: _confirmarController,
-                      decoration: const InputDecoration(
-                        labelText: 'Confirmar contraseña',
-                      ),
-                      obscureText: true,
-                      enabled: !_enviando,
+                      onEnviar: _registrar,
                       validator: (v) => (v == null || v.length < 6)
                           ? 'Mínimo 6 caracteres'
                           : null,

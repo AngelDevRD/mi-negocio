@@ -164,6 +164,42 @@ void main() {
       expect(_fila('Descontinuado'), findsNothing);
     });
 
+    testWidgets('el chip "Sin costo" (solo Administrador) muestra SOLO los '
+        'activos con costo 0', (tester) async {
+      await _montar(
+        tester,
+        home: const ProductsListScreen(),
+        productos: [
+          producto('Yuca', compra: 0),
+          producto('Plátano', compra: 0),
+          producto('Arroz', compra: 2800),
+          producto('Viejo', compra: 0, activo: false),
+        ],
+      );
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Sin costo'));
+      await tester.pumpAndSettle();
+
+      expect(_fila('Yuca'), findsOneWidget);
+      expect(_fila('Plátano'), findsOneWidget);
+      expect(_fila('Arroz'), findsNothing);
+      expect(_fila('Viejo'), findsNothing); // inactivo
+    });
+
+    testWidgets('el Cajero NO tiene el chip "Sin costo" (no ve costos)', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        home: const ProductsListScreen(),
+        productos: [producto('Yuca', compra: 0)],
+        rol: RolUsuario.cajero,
+      );
+
+      expect(find.widgetWithText(ChoiceChip, 'Sin costo'), findsNothing);
+      expect(find.widgetWithText(ChoiceChip, 'Stock bajo'), findsOneWidget);
+    });
+
     testWidgets('el chip "Inactivos" muestra solo los inactivos', (
       tester,
     ) async {

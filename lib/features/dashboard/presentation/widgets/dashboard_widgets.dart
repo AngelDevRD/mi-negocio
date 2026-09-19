@@ -130,6 +130,53 @@ class _TarjetaAdvertencia extends StatelessWidget {
   }
 }
 
+/// Aviso compacto (solo Administrador): "N productos sin costo — la ganancia
+/// puede no ser exacta". Lleva a Productos con el filtro "Sin costo". No
+/// aparece con 0 productos sin costo ni mientras carga o si falla la consulta.
+class AvisoProductosSinCosto extends ConsumerWidget {
+  const AvisoProductosSinCosto({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(productosSinCostoProvider).value ?? 0;
+    if (n <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: _TarjetaAdvertencia(
+        onTap: () {
+          ref
+              .read(productosFiltroProvider.notifier)
+              .actualizar(
+                (f) => f.copyWith(
+                  soloActivos: true,
+                  soloStockBajo: false,
+                  soloSinCosto: true,
+                ),
+              );
+          context.go(AppRoutes.productos);
+        },
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_outlined,
+              color: context.appColors.advertencia,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                '$n ${n == 1 ? 'producto sin costo' : 'productos sin costo'}'
+                ' — la ganancia puede no ser exacta',
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Banner de vencimiento próximo de la suscripción (F18), solo Administrador.
 class VencimientoBanner extends ConsumerWidget {
   const VencimientoBanner({super.key});

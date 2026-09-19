@@ -456,4 +456,83 @@ void main() {
       expect(find.text('Nueva venta'), findsNothing);
     });
   });
+  group('aviso de productos sin costo (solo Administrador)', () {
+    List<Override> conSinCosto(RolUsuario rol, int n) => [
+      ..._overrides(rol: rol),
+      productosSinCostoProvider.overrideWith((ref) => Stream.value(n)),
+    ];
+
+    testWidgets('el administrador lo ve con el N correcto', (tester) async {
+      await _montar(tester, conSinCosto(RolUsuario.administrador, 3));
+
+      expect(
+        find.text('3 productos sin costo — la ganancia puede no ser exacta'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.warning_amber_outlined), findsWidgets);
+    });
+
+    testWidgets('con 1 producto usa el singular', (tester) async {
+      await _montar(tester, conSinCosto(RolUsuario.administrador, 1));
+
+      expect(
+        find.text('1 producto sin costo — la ganancia puede no ser exacta'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('0 productos sin costo: NO aparece', (tester) async {
+      await _montar(tester, conSinCosto(RolUsuario.administrador, 0));
+
+      expect(find.textContaining('sin costo'), findsNothing);
+    });
+
+    testWidgets('el cajero NO lo ve (no ve costos)', (tester) async {
+      await _montar(tester, conSinCosto(RolUsuario.cajero, 5));
+
+      expect(find.textContaining('sin costo'), findsNothing);
+    });
+
+    testWidgets('mientras carga o si falla la consulta no molesta', (
+      tester,
+    ) async {
+      await _montar(tester, [
+        ..._overrides(rol: RolUsuario.administrador),
+        productosSinCostoProvider.overrideWith(
+          (ref) => Stream<int>.error(StateError('boom')),
+        ),
+      ]);
+
+      expect(find.textContaining('sin costo'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tocarlo abre Productos con el filtro "Sin costo"', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        conSinCosto(RolUsuario.administrador, 2),
+        extra: [
+          GoRoute(
+            path: AppRoutes.productos,
+            builder: (_, _) =>
+                const Scaffold(body: Center(child: Text('lista de productos'))),
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DashboardScreen)),
+      );
+      expect(container.read(productosFiltroProvider).soloSinCosto, isFalse);
+
+      await tester.tap(find.textContaining('productos sin costo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('lista de productos'), findsOneWidget);
+      final filtro = container.read(productosFiltroProvider);
+      expect(filtro.soloSinCosto, isTrue);
+      expect(filtro.soloStockBajo, isFalse);
+    });
+  });
 }

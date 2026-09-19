@@ -29,7 +29,7 @@ class AppGestion extends ConsumerWidget {
     }
 
     return MaterialApp.router(
-      title: 'App Gestión Negocios',
+      title: 'Mi Negocio',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: router,

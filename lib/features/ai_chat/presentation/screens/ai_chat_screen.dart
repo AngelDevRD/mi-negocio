@@ -3,10 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/enums.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../license/domain/entities/licencia.dart';
 import '../../../license/presentation/providers/license_providers.dart';
 import '../../domain/entities/chat_message.dart';
 import '../providers/ai_chat_providers.dart';
+
+/// Preguntas de ejemplo del estado vacío (se tocan y se envían).
+const preguntasSugeridas = [
+  '¿Cuánto vendí este mes?',
+  '¿Qué productos se están acabando?',
+  '¿En qué gasté más este mes?',
+];
 
 /// Asistente de IA del negocio (FASE 21, RF-IA). Solo disponible con
 /// licencia Nube, requiere conexión a internet.
@@ -23,37 +31,15 @@ class AiChatScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Asistente IA')),
-      body: esNube ? const _ChatBody() : const _BloqueoNube(),
-    );
-  }
-}
-
-class _BloqueoNube extends StatelessWidget {
-  const _BloqueoNube();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 48),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'El asistente de IA solo está disponible en el plan Nube.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
+      body: esNube
+          ? const _ChatBody()
+          : const EmptyState(
+              icono: Icons.lock_outline,
+              titulo: 'El asistente de IA solo está en el plan Nube',
+              descripcion:
+                  'Activa una licencia Nube para hacer preguntas sobre tu '
+                  'negocio.',
             ),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'Activa una licencia Nube para hacer preguntas sobre tu negocio.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -79,6 +65,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   void _enviar() {
     final texto = _controller.text;
     if (texto.trim().isEmpty) return;
+    if (ref.read(aiChatControllerProvider).cargando) return;
     _controller.clear();
     ref.read(aiChatControllerProvider.notifier).enviar(texto);
   }
@@ -104,35 +91,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       children: [
         Expanded(
           child: state.mensajes.isEmpty
-              ? const _EstadoVacio()
+              ? _EstadoVacio(
+                  onPregunta: (p) =>
+                      ref.read(aiChatControllerProvider.notifier).enviar(p),
+                )
               : ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: state.mensajes.length,
+                  // +1: la burbuja "escribiendo" mientras se espera.
+                  itemCount: state.mensajes.length + (state.cargando ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index >= state.mensajes.length) {
+                      return const _Escribiendo();
+                    }
                     return _BurbujaMensaje(mensaje: state.mensajes[index]);
                   },
                 ),
         ),
-        if (state.cargando)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
         if (state.error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm,
-            ),
-            child: Text(
-              state.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+          _AvisoDeError(
+            mensaje: state.error!,
+            tipo: state.tipoError ?? AiChatErrorTipo.fallo,
+            onReintentar: () =>
+                ref.read(aiChatControllerProvider.notifier).reintentar(),
           ),
         SafeArea(
           top: false,
@@ -146,13 +127,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     decoration: const InputDecoration(
                       hintText: 'Pregunta sobre tu negocio…',
                     ),
+                    keyboardType: TextInputType.text,
+                    textCapitalization: TextCapitalization.sentences,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _enviar(),
-                    enabled: !state.cargando,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 IconButton.filled(
+                  tooltip: 'Enviar pregunta',
                   onPressed: state.cargando ? null : _enviar,
                   icon: const Icon(Icons.send),
                 ),
@@ -165,13 +148,67 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 }
 
+/// Aviso de error del asistente: ícono + mensaje humano y, salvo que el
+/// servicio no esté configurado, "Reintentar".
+class _AvisoDeError extends StatelessWidget {
+  const _AvisoDeError({
+    required this.mensaje,
+    required this.tipo,
+    required this.onReintentar,
+  });
+
+  final String mensaje;
+  final AiChatErrorTipo tipo;
+  final VoidCallback onReintentar;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final icono = switch (tipo) {
+      AiChatErrorTipo.sinConexion => Icons.wifi_off_outlined,
+      AiChatErrorTipo.noConfigurado => Icons.settings_suggest_outlined,
+      AiChatErrorTipo.fallo => Icons.error_outline,
+    };
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: scheme.errorContainer,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            Icon(icono, color: scheme.onErrorContainer),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                mensaje,
+                style: TextStyle(color: scheme.onErrorContainer),
+              ),
+            ),
+            if (tipo != AiChatErrorTipo.noConfigurado)
+              TextButton(
+                onPressed: onReintentar,
+                child: const Text('Reintentar'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EstadoVacio extends StatelessWidget {
-  const _EstadoVacio();
+  const _EstadoVacio({required this.onPregunta});
+
+  final ValueChanged<String> onPregunta;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -182,6 +219,58 @@ class _EstadoVacio extends StatelessWidget {
               'Pregúntale al asistente sobre tus ventas, gastos o inventario.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final p in preguntasSugeridas)
+                  ActionChip(label: Text(p), onPressed: () => onPregunta(p)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "El asistente está escribiendo…": la respuesta viene de la red y puede
+/// tardar; la pantalla sigue usable.
+class _Escribiendo extends StatelessWidget {
+  const _Escribiendo();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              height: 16,
+              width: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: Text(
+                'El asistente está escribiendo…',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ],
         ),
@@ -217,7 +306,7 @@ class _BurbujaMensaje extends StatelessWidget {
               : scheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(mensaje.texto),
+        child: SelectableText(mensaje.texto),
       ),
     );
   }

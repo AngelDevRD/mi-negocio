@@ -29,7 +29,9 @@ class ProductsListScreen extends ConsumerWidget {
     };
 
     // Chip activo: "Todos" = activos, "Inactivos" = inactivos.
-    final chip = filtro.soloStockBajo
+    final chip = filtro.soloSinCosto
+        ? _FiltroChip.sinCosto
+        : filtro.soloStockBajo
         ? _FiltroChip.stockBajo
         : filtro.soloActivos == false
         ? _FiltroChip.inactivos
@@ -120,6 +122,8 @@ class ProductsListScreen extends ConsumerWidget {
                     (_FiltroChip.todos, 'Todos'),
                     (_FiltroChip.stockBajo, 'Stock bajo'),
                     (_FiltroChip.inactivos, 'Inactivos'),
+                    // El costo solo lo ve el Administrador.
+                    if (esAdmin) (_FiltroChip.sinCosto, 'Sin costo'),
                   ])
                     ChoiceChip(
                       label: Text(etiqueta),
@@ -128,6 +132,7 @@ class ProductsListScreen extends ConsumerWidget {
                         (actual) => actual.copyWith(
                           soloActivos: valor != _FiltroChip.inactivos,
                           soloStockBajo: valor == _FiltroChip.stockBajo,
+                          soloSinCosto: valor == _FiltroChip.sinCosto,
                         ),
                       ),
                     ),
@@ -182,7 +187,7 @@ class ProductsListScreen extends ConsumerWidget {
   }
 }
 
-enum _FiltroChip { todos, stockBajo, inactivos }
+enum _FiltroChip { todos, stockBajo, inactivos, sinCosto }
 
 /// Catálogo vacío: invita a agregar el primer producto (y, solo el
 /// Administrador, a importarlos desde Excel).

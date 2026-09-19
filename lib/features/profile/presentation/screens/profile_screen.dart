@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/tables/base.dart';
 import '../../../../core/sync/sync_settings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../cloud_sync/data/cloud_auth_repository.dart';
 import '../../../cloud_sync/presentation/cloud_login_screen.dart';
@@ -31,13 +33,22 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Perfil y suscripción')),
       body: negocioAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const Center(
-          child: Text('No se pudo cargar el perfil del negocio.'),
+        loading: () => const LoadingView(mensaje: 'Cargando perfil...'),
+        error: (error, stackTrace) => ErrorState(
+          mensaje: 'No se pudo cargar el perfil del negocio.',
+          error: error,
+          stackTrace: stackTrace,
+          onReintentar: () => ref.invalidate(negocioProvider),
         ),
         data: (negocio) {
           if (negocio == null) {
-            return const Center(child: Text('Negocio no configurado.'));
+            return const EmptyState(
+              icono: Icons.storefront_outlined,
+              titulo: 'Negocio no configurado',
+              descripcion:
+                  'Aún no hay datos del negocio en este equipo. Completa la '
+                  'configuración inicial.',
+            );
           }
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
@@ -78,8 +89,6 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
   String? _logoPath;
   bool _guardando = false;
   bool _inicializado = false;
-  String? _error;
-  String? _mensaje;
 
   @override
   void dispose() {
@@ -128,6 +137,7 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!_formKey.currentState!.validate()) return;
 
     final usuario = ref.read(authControllerProvider).value;
@@ -136,15 +146,11 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
       _ => null,
     };
     if (actorId == null) {
-      setState(() => _error = 'No hay una sesión activa.');
+      AppSnackbar.error(context, 'No hay una sesión activa.');
       return;
     }
 
-    setState(() {
-      _guardando = true;
-      _error = null;
-      _mensaje = null;
-    });
+    setState(() => _guardando = true);
 
     final identificacion = _identificacionController.text.trim();
     final direccion = _direccionController.text.trim();
@@ -164,8 +170,20 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
             logoPath: _logoPath,
             actorId: actorId,
           );
-      if (!mounted) return;
-      setState(() => _mensaje = 'Perfil actualizado.');
+      if (mounted) AppSnackbar.exito(context, 'Perfil actualizado.');
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo guardar el perfil',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      if (mounted) {
+        AppSnackbar.error(
+          context,
+          'No se pudo guardar el perfil. Inténtalo de nuevo.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
@@ -200,8 +218,12 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
                 decoration: const InputDecoration(
                   labelText: 'Nombre del negocio',
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Escribe el nombre de tu negocio'
+                    : null,
               ),
               const SizedBox(height: AppSpacing.sm),
               TextFormField(
@@ -209,6 +231,8 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
                 decoration: const InputDecoration(
                   labelText: 'RNC o cédula (opcional)',
                 ),
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: AppSpacing.sm),
               TextFormField(
@@ -216,6 +240,9 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
                 decoration: const InputDecoration(
                   labelText: 'Dirección (opcional)',
                 ),
+                keyboardType: TextInputType.streetAddress,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: AppSpacing.sm),
               TextFormField(
@@ -224,6 +251,7 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
                   labelText: 'Teléfono (opcional)',
                 ),
                 keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: AppSpacing.sm),
               TextFormField(
@@ -232,18 +260,15 @@ class _PerfilFormState extends ConsumerState<_PerfilForm> {
                   labelText: 'Email (opcional)',
                 ),
                 keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                validator: (v) {
+                  final t = v?.trim() ?? '';
+                  if (t.isEmpty) return null;
+                  return t.contains('@') && t.contains('.')
+                      ? null
+                      : 'Escribe un email válido';
+                },
               ),
-              if (_error != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              if (_mensaje != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(_mensaje!),
-              ],
               const SizedBox(height: AppSpacing.md),
               FilledButton(
                 onPressed: _guardando ? null : _guardar,
@@ -292,6 +317,7 @@ class _LogoPicker extends StatelessWidget {
                   bottom: 0,
                   right: 0,
                   child: IconButton.filledTonal(
+                    tooltip: 'Quitar logo',
                     onPressed: onQuitar,
                     icon: const Icon(Icons.close),
                   ),
@@ -352,41 +378,66 @@ class _SuscripcionCardState extends ConsumerState<_SuscripcionCard> {
   }
 
   Future<void> _renovar() async {
+    if (_renovando) return;
     setState(() => _renovando = true);
-    final (mensaje, fallo) = await ref
-        .read(licenseControllerProvider.notifier)
-        .renovar();
+    String? mensaje;
+    String? error;
+    try {
+      final (m, fallo) = await ref
+          .read(licenseControllerProvider.notifier)
+          .renovar();
+      mensaje = m;
+      error = fallo?.message;
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo pedir la renovación',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      error = 'No se pudo enviar la solicitud. Inténtalo de nuevo.';
+    }
     if (!mounted) return;
     setState(() => _renovando = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje ?? fallo!.message),
-        backgroundColor: fallo != null
-            ? Theme.of(context).colorScheme.error
-            : null,
-      ),
-    );
+    if (error != null) {
+      AppSnackbar.error(context, error);
+    } else {
+      AppSnackbar.exito(context, mensaje ?? 'Solicitud de renovación enviada.');
+    }
   }
 
   /// Activa o cambia de plan (p. ej. Demo -> Local/Nube) sin cerrar sesión.
   Future<void> _activarClave() async {
+    if (_activando) return;
     final clave = _claveController.text.trim();
-    if (clave.isEmpty) return;
+    if (clave.isEmpty) {
+      AppSnackbar.error(context, 'Escribe la clave de licencia.');
+      return;
+    }
     setState(() => _activando = true);
-    final fallo = await ref
-        .read(licenseControllerProvider.notifier)
-        .activarConClave(clave);
+    String? error;
+    try {
+      final fallo = await ref
+          .read(licenseControllerProvider.notifier)
+          .activarConClave(clave);
+      error = fallo?.message;
+    } on Object catch (e, st) {
+      developer.log(
+        'No se pudo activar la licencia',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      error = 'No se pudo activar la licencia. Inténtalo de nuevo.';
+    }
     if (!mounted) return;
     setState(() => _activando = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(fallo?.message ?? 'Licencia activada correctamente.'),
-        backgroundColor: fallo != null
-            ? Theme.of(context).colorScheme.error
-            : null,
-      ),
-    );
-    if (fallo == null) _claveController.clear();
+    if (error != null) {
+      AppSnackbar.error(context, error);
+    } else {
+      AppSnackbar.exito(context, 'Licencia activada correctamente.');
+      _claveController.clear();
+    }
   }
 
   @override
@@ -416,7 +467,14 @@ class _SuscripcionCardState extends ConsumerState<_SuscripcionCard> {
             Text('Suscripción', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             _InfoRow(etiqueta: 'Plan', valor: _tipoLabel(licencia.tipo)),
-            _InfoRow(etiqueta: 'Estado', valor: _estadoLabel(licencia.estado)),
+            _InfoRow(
+              etiqueta: 'Estado',
+              valor: _estadoLabel(licencia.estado),
+              icono: _estadoIcono(licencia.estado),
+              color: licencia.estado == EstadoLicencia.activa
+                  ? context.appColors.exito
+                  : Theme.of(context).colorScheme.error,
+            ),
             _InfoRow(
               etiqueta: 'Activación',
               valor: formatoFecha.format(licencia.fechaActivacion.toLocal()),
@@ -454,6 +512,11 @@ class _SuscripcionCardState extends ConsumerState<_SuscripcionCard> {
                 hintText: 'AGN-XXXX-XXXX-XXXX',
               ),
               textCapitalization: TextCapitalization.characters,
+              keyboardType: TextInputType.visiblePassword,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _activarClave(),
               enabled: !_activando,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -526,10 +589,20 @@ class _AlertaVencimiento extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.etiqueta, required this.valor});
+  const _InfoRow({
+    required this.etiqueta,
+    required this.valor,
+    this.icono,
+    this.color,
+  });
 
   final String etiqueta;
   final String valor;
+
+  /// Con [icono], el valor se muestra como etiqueta ícono + texto (no solo
+  /// color).
+  final IconData? icono;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -543,12 +616,15 @@ class _InfoRow extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
-          Text(
-            valor,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
+          if (icono != null)
+            EtiquetaEstado(icono: icono!, texto: valor, color: color)
+          else
+            Text(
+              valor,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
         ],
       ),
     );
@@ -611,7 +687,9 @@ class _SyncCard extends ConsumerWidget {
                   border: OutlineInputBorder(),
                 ),
                 items: SyncFrequency.values
-                    .map((f) => DropdownMenuItem(value: f, child: Text(f.label)))
+                    .map(
+                      (f) => DropdownMenuItem(value: f, child: Text(f.label)),
+                    )
                     .toList(),
                 onChanged: (f) {
                   if (f != null) {
@@ -631,6 +709,12 @@ String _tipoLabel(TipoLicencia tipo) => switch (tipo) {
   TipoLicencia.demo => 'Demo',
   TipoLicencia.local => 'Local',
   TipoLicencia.nube => 'Nube',
+};
+
+IconData _estadoIcono(EstadoLicencia estado) => switch (estado) {
+  EstadoLicencia.activa => Icons.check_circle_outline,
+  EstadoLicencia.pendiente => Icons.hourglass_empty,
+  _ => Icons.block_outlined,
 };
 
 String _estadoLabel(EstadoLicencia estado) => switch (estado) {

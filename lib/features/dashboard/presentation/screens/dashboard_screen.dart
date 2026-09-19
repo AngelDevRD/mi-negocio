@@ -45,6 +45,7 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
               ],
               if (esAdmin) const VencimientoBanner(),
+              if (esAdmin) const AvisoProductosSinCosto(),
               TarjetaCaja(abrirEsPrimaria: hayProductos),
               const SizedBox(height: AppSpacing.md),
               // Sin productos no hay nada que vender ni comprar: la única

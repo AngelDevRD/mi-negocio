@@ -22,7 +22,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('App Gestión Negocios'), findsOneWidget);
+    expect(find.text('Mi Negocio'), findsOneWidget);
     expect(find.text('Comenzar prueba gratis'), findsOneWidget);
   });
 

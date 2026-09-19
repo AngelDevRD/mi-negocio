@@ -656,7 +656,7 @@ class _AppVisual extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'App Gestión Negocios',
+      title: 'Mi Negocio',
       debugShowCheckedModeBanner: false,
       theme: _temaVisual(),
       routerConfig: ref.watch(appRouterProvider),
@@ -744,6 +744,13 @@ class SesionVisual {
     await _tester.tap(find.byKey(ValueKey(clave)));
     await estabilizar(_tester);
     await _tester.tap(find.text(opcion).last);
+    await estabilizar(_tester);
+  }
+
+  /// Escribe [texto] en el último campo de texto SIN etiqueta de la pantalla
+  /// (p. ej. el de la conversación del asistente).
+  Future<void> escribirEnUltimoCampo(String texto) async {
+    await _tester.enterText(find.byType(TextField).last, texto);
     await estabilizar(_tester);
   }
 
@@ -863,6 +870,8 @@ Future<SesionVisual> montarApp(
   required TamanoPantalla tamano,
   double textScale = 1.0,
   List<Override> overrides = const [],
+  LicenseController Function()? licencia,
+  AuthController Function()? autenticacion,
 }) async {
   // Los errores de Flutter (overflows, asserts de debug de la app) no deben
   // abortar la captura: se recolectan y se vuelcan a build/visual/errores.txt.
@@ -885,8 +894,12 @@ Future<SesionVisual> montarApp(
     ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(base.db),
-        licenseControllerProvider.overrideWith(_LicenciaActiva.new),
-        authControllerProvider.overrideWith(() => _SesionActiva(usuario)),
+        // Licencia y sesión se reemplazan (no se duplican): dos overrides del
+        // mismo provider hacen fallar a Riverpod.
+        licenseControllerProvider.overrideWith(licencia ?? _LicenciaActiva.new),
+        authControllerProvider.overrideWith(
+          autenticacion ?? () => _SesionActiva(usuario),
+        ),
         ...overrides,
       ],
       child: const _AppVisual(),
@@ -918,6 +931,8 @@ Future<void> escenarioVisual(
   required TamanoPantalla tamano,
   double textScale = 1.0,
   List<Override> overrides = const [],
+  LicenseController Function()? licencia,
+  AuthController Function()? autenticacion,
   required Future<void> Function(SesionVisual sesion) cuerpo,
 }) async {
   final sesion = await montarApp(
@@ -928,6 +943,8 @@ Future<void> escenarioVisual(
     tamano: tamano,
     textScale: textScale,
     overrides: overrides,
+    licencia: licencia,
+    autenticacion: autenticacion,
   );
   try {
     await cuerpo(sesion);

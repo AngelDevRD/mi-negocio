@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.angeldevrd" "\0"
-            VALUE "FileDescription", "MiTienda 360" "\0"
+            VALUE "FileDescription", "Mi Negocio" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "app_gestion" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.angeldevrd. All rights reserved." "\0"
             VALUE "OriginalFilename", "app_gestion.exe" "\0"
-            VALUE "ProductName", "MiTienda 360" "\0"
+            VALUE "ProductName", "Mi Negocio" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

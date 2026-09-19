@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import '../../../../core/database/enums.dart';
 import '../../../../core/errors/result.dart';
 import '../../domain/entities/licencia.dart';
@@ -187,8 +189,20 @@ class LicenseRepositoryImpl implements LicenseRepository {
       );
       await _local.guardar(licencia);
       return Result.ok(licencia);
-    } catch (e) {
-      return Result.fail(NetworkFailure('Error de conexión al activar: $e'));
+    } on Object catch (e, st) {
+      // El detalle técnico va al log, NUNCA al mensaje que ve el usuario.
+      developer.log(
+        'Falló al activar la licencia',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        NetworkFailure(
+          'No se pudo conectar con el servidor de licencias. Revisa tu '
+          'conexión e inténtalo de nuevo.',
+        ),
+      );
     }
   }
 
@@ -230,8 +244,20 @@ class LicenseRepositoryImpl implements LicenseRepository {
         );
       }
       return Result.ok(response.mensaje ?? 'Solicitud enviada.');
-    } catch (e) {
-      return Result.fail(NetworkFailure('Error de conexión al solicitar: $e'));
+    } on Object catch (e, st) {
+      // El detalle técnico va al log, NUNCA al mensaje que ve el usuario.
+      developer.log(
+        'Falló al enviar la solicitud',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        NetworkFailure(
+          'No se pudo conectar con el servidor de licencias. Revisa tu '
+          'conexión e inténtalo de nuevo.',
+        ),
+      );
     }
   }
 
@@ -279,8 +305,20 @@ class LicenseRepositoryImpl implements LicenseRepository {
         );
       }
       return Result.ok(response.mensaje ?? 'Solicitud de renovación enviada.');
-    } catch (e) {
-      return Result.fail(NetworkFailure('Error de conexión al renovar: $e'));
+    } on Object catch (e, st) {
+      // El detalle técnico va al log, NUNCA al mensaje que ve el usuario.
+      developer.log(
+        'Falló al solicitar la renovación',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      return const Result.fail(
+        NetworkFailure(
+          'No se pudo conectar con el servidor de licencias. Revisa tu '
+          'conexión e inténtalo de nuevo.',
+        ),
+      );
     }
   }
 }

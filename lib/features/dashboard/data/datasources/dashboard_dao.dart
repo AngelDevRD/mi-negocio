@@ -105,6 +105,21 @@ class DashboardDao {
     );
   }
 
+  /// Cuántos productos activos tienen costo 0 (los que crea un Cajero, o los
+  /// que nunca se completaron): su ganancia no es exacta. Un solo `COUNT`,
+  /// sin cargar los productos.
+  Stream<int> watchProductosSinCosto() {
+    final total = _db.productos.id.count();
+    final query = _db.selectOnly(_db.productos)
+      ..addColumns([total])
+      ..where(
+        _db.productos.deletedAt.isNull() &
+            _db.productos.activo.equals(true) &
+            _db.productos.precioCompra.equals(0),
+      );
+    return query.watchSingle().map((row) => row.read(total) ?? 0);
+  }
+
   /// Productos activos cuyo stock llegó al mínimo o por debajo (RF-INV-02).
   Stream<List<ProductoBajoStock>> watchProductosBajoStock({int limit = 10}) {
     final query = _db.select(_db.productos)

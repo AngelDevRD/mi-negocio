@@ -24,6 +24,7 @@ class ProductosFiltro {
     this.categoriaId,
     this.soloActivos = true,
     this.soloStockBajo = false,
+    this.soloSinCosto = false,
   });
 
   final String busqueda;
@@ -32,6 +33,10 @@ class ProductosFiltro {
   /// Solo productos con stock <= mínimo (los mismos que marca el Inicio).
   /// Se filtra en el provider: no cambia el datasource.
   final bool soloStockBajo;
+
+  /// Solo productos con costo 0 (su ganancia no es exacta). Solo la ofrece la
+  /// pantalla al Administrador. Se filtra en el provider.
+  final bool soloSinCosto;
 
   /// `true`: solo activos · `false`: solo inactivos · valor por defecto
   /// "Activos"; el toggle en pantalla puede mostrar todos pasando `null`
@@ -43,6 +48,7 @@ class ProductosFiltro {
     Object? categoriaId = _sinCambio,
     Object? soloActivos = _sinCambio,
     bool? soloStockBajo,
+    bool? soloSinCosto,
   }) {
     return ProductosFiltro(
       busqueda: busqueda ?? this.busqueda,
@@ -53,6 +59,7 @@ class ProductosFiltro {
           ? this.soloActivos
           : soloActivos as bool?,
       soloStockBajo: soloStockBajo ?? this.soloStockBajo,
+      soloSinCosto: soloSinCosto ?? this.soloSinCosto,
     );
   }
 
@@ -83,12 +90,12 @@ final productosProvider = StreamProvider<List<Producto>>((ref) {
         activo: filtro.soloActivos,
       )
       .map(
-        (lista) => filtro.soloStockBajo
-            ? [
-                for (final p in lista)
-                  if (p.stockBajo) p,
-              ]
-            : lista,
+        (lista) => [
+          for (final p in lista)
+            if ((!filtro.soloStockBajo || p.stockBajo) &&
+                (!filtro.soloSinCosto || p.precioCompra.cents == 0))
+              p,
+        ],
       );
 });
 

@@ -1,8 +1,15 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/result.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/widgets.dart';
 import '../providers/license_providers.dart';
+
+/// Mensaje que se muestra cuando algo falla sin un motivo legible.
+const _errorGenerico = 'No se pudo completar la operación. Inténtalo de nuevo.';
 
 /// Pantalla de activación (RF-LIC-01): Demo de 15 días o clave de licencia.
 class ActivationScreen extends ConsumerStatefulWidget {
@@ -14,7 +21,12 @@ class ActivationScreen extends ConsumerStatefulWidget {
 
 class _ActivationScreenState extends ConsumerState<ActivationScreen> {
   final _claveController = TextEditingController();
-  bool _procesando = false;
+
+  /// Qué se está haciendo ("Activando la licencia..."), o `null`. Mientras
+  /// haya algo en curso los botones quedan deshabilitados (guard doble toque).
+  String? _enCurso;
+
+  bool get _procesando => _enCurso != null;
 
   @override
   void dispose() {
@@ -22,38 +34,41 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
     super.dispose();
   }
 
-  void _mostrarMensaje(String mensaje, {bool error = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: error ? Theme.of(context).colorScheme.error : null,
-      ),
-    );
-  }
-
-  Future<void> _ejecutar(Future<void> Function() accion) async {
-    setState(() => _procesando = true);
+  Future<void> _ejecutar(
+    String texto,
+    Future<Failure?> Function() accion,
+  ) async {
+    if (_procesando) return;
+    setState(() => _enCurso = texto);
     try {
-      await accion();
+      final fallo = await accion();
+      if (fallo != null && mounted) {
+        AppSnackbar.error(context, fallo.message);
+      }
+    } on Object catch (e, st) {
+      developer.log(
+        'Falló la activación',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      if (mounted) AppSnackbar.error(context, _errorGenerico);
     } finally {
-      if (mounted) setState(() => _procesando = false);
+      if (mounted) setState(() => _enCurso = null);
     }
   }
 
-  Future<void> _activarDemo() => _ejecutar(() async {
-    final fallo = await ref
-        .read(licenseControllerProvider.notifier)
-        .activarDemo();
-    if (fallo != null) _mostrarMensaje(fallo.message, error: true);
-  });
+  Future<void> _activarDemo() => _ejecutar(
+    'Preparando tu prueba gratis...',
+    () => ref.read(licenseControllerProvider.notifier).activarDemo(),
+  );
 
-  Future<void> _activarClave() => _ejecutar(() async {
-    final fallo = await ref
+  Future<void> _activarClave() => _ejecutar(
+    'Activando la licencia...',
+    () => ref
         .read(licenseControllerProvider.notifier)
-        .activarConClave(_claveController.text);
-    if (fallo != null) _mostrarMensaje(fallo.message, error: true);
-  });
+        .activarConClave(_claveController.text),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +88,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                   Icon(Icons.storefront, size: 64, color: scheme.primary),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'App Gestión Negocios',
+                    'Mi Negocio',
                     style: textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
@@ -101,6 +116,11 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                               hintText: 'XXXX-XXXX-XXXX',
                             ),
                             textCapitalization: TextCapitalization.characters,
+                            keyboardType: TextInputType.visiblePassword,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _activarClave(),
                             enabled: !_procesando,
                           ),
                           const SizedBox(height: AppSpacing.md),
@@ -145,9 +165,15 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                         : () => RequestLicenseSheet.mostrar(context, ref),
                     child: const Text('¿No tienes licencia? Solicítala aquí'),
                   ),
-                  if (_procesando) ...[
+                  if (_enCurso != null) ...[
                     const SizedBox(height: AppSpacing.md),
-                    const Center(child: CircularProgressIndicator()),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      _enCurso!,
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodySmall,
+                    ),
                   ],
                 ],
               ),
@@ -191,28 +217,39 @@ class RequestLicenseSheetState extends ConsumerState<RequestLicenseSheet> {
   }
 
   Future<void> _enviar() async {
+    if (_enviando) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _enviando = true);
-    final (mensaje, fallo) = await ref
-        .read(licenseControllerProvider.notifier)
-        .solicitar(
-          nombreNegocio: _nombreController.text,
-          telefono: _telefonoController.text.isEmpty
-              ? null
-              : _telefonoController.text,
-          tipoDeseado: _tipoDeseado,
-        );
+    String? mensaje;
+    Failure? fallo;
+    try {
+      (mensaje, fallo) = await ref
+          .read(licenseControllerProvider.notifier)
+          .solicitar(
+            nombreNegocio: _nombreController.text,
+            telefono: _telefonoController.text.trim().isEmpty
+                ? null
+                : _telefonoController.text.trim(),
+            tipoDeseado: _tipoDeseado,
+          );
+    } on Object catch (e, st) {
+      developer.log(
+        'Falló la solicitud de licencia',
+        name: 'mi_negocio',
+        error: e,
+        stackTrace: st,
+      );
+      fallo = const ValidationFailure(_errorGenerico);
+    }
     if (!mounted) return;
     setState(() => _enviando = false);
+    if (fallo != null) {
+      // El formulario sigue abierto: se puede corregir y reintentar.
+      AppSnackbar.error(context, fallo.message);
+      return;
+    }
+    AppSnackbar.exito(context, mensaje ?? 'Solicitud enviada.');
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje ?? fallo!.message),
-        backgroundColor: fallo != null
-            ? Theme.of(context).colorScheme.error
-            : null,
-      ),
-    );
   }
 
   @override
@@ -224,61 +261,73 @@ class RequestLicenseSheetState extends ConsumerState<RequestLicenseSheet> {
         top: AppSpacing.lg,
         bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Solicitar licencia',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _nombreController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre del negocio',
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Solicitar licencia',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: _telefonoController,
-              decoration: const InputDecoration(
-                labelText: 'Teléfono (opcional)',
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _nombreController,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del negocio',
+                ),
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                enabled: !_enviando,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Escribe el nombre de tu negocio'
+                    : null,
               ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            DropdownButtonFormField<String>(
-              initialValue: _tipoDeseado,
-              decoration: const InputDecoration(labelText: 'Plan deseado'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'local',
-                  child: Text('Local (un dispositivo)'),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _telefonoController,
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono (opcional)',
                 ),
-                DropdownMenuItem(
-                  value: 'nube',
-                  child: Text('Nube (con sincronización)'),
-                ),
-              ],
-              onChanged: (v) => setState(() => _tipoDeseado = v ?? 'local'),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton(
-              onPressed: _enviando ? null : _enviar,
-              child: _enviando
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Enviar solicitud'),
-            ),
-          ],
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.done,
+                enabled: !_enviando,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              DropdownButtonFormField<String>(
+                initialValue: _tipoDeseado,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Plan deseado'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'local',
+                    child: Text('Local (un dispositivo)'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'nube',
+                    child: Text('Nube (con sincronización)'),
+                  ),
+                ],
+                onChanged: _enviando
+                    ? null
+                    : (v) => setState(() => _tipoDeseado = v ?? 'local'),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton(
+                onPressed: _enviando ? null : _enviar,
+                child: _enviando
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Enviar solicitud'),
+              ),
+            ],
+          ),
         ),
       ),
     );

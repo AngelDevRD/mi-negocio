@@ -7,6 +7,23 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Anota los SELECT que llegan a la base (para comprobar que es un COUNT).
+class _Espia extends QueryInterceptor {
+  _Espia(this.consultas);
+
+  final List<String> consultas;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor e,
+    String statement,
+    List<Object?> args,
+  ) {
+    consultas.add(statement);
+    return super.runSelect(e, statement, args);
+  }
+}
+
 void main() {
   late AppDatabase db;
   late DashboardDao dao;
@@ -260,6 +277,91 @@ void main() {
 
       expect(resultado, hasLength(1));
       expect(resultado.single.nombre, 'Bajo stock');
+    });
+  });
+
+  group('watchProductosSinCosto', () {
+    Future<String> producto(
+      String nombre, {
+      int costo = 0,
+      bool activo = true,
+      bool borrado = false,
+    }) async {
+      final id = generateUuidV4();
+      await db
+          .into(db.productos)
+          .insert(
+            ProductosCompanion.insert(
+              id: Value(id),
+              nombre: nombre,
+              precioCompra: Value(costo),
+              activo: Value(activo),
+              deletedAt: Value(borrado ? DateTime.now().toUtc() : null),
+            ),
+          );
+      return id;
+    }
+
+    test(
+      'cuenta solo los productos ACTIVOS, no borrados y con costo 0',
+      () async {
+        await producto('Sin costo A');
+        await producto('Sin costo B');
+        await producto('Con costo', costo: 10000);
+        await producto('Inactivo sin costo', activo: false);
+        await producto('Borrado sin costo', borrado: true);
+
+        expect(await dao.watchProductosSinCosto().first, 2);
+      },
+    );
+
+    test('sin productos o todos con costo: 0', () async {
+      expect(await dao.watchProductosSinCosto().first, 0);
+      await producto('Con costo', costo: 500);
+      expect(await dao.watchProductosSinCosto().first, 0);
+    });
+
+    test('es reactivo: al completar el costo baja el conteo', () async {
+      final id = await producto('Sin costo A');
+      await producto('Sin costo B');
+
+      final emisiones = <int>[];
+      final sub = dao.watchProductosSinCosto().listen(emisiones.add);
+      await pumpEventQueue();
+      expect(emisiones.last, 2);
+
+      await (db.update(db.productos)..where((t) => t.id.equals(id))).write(
+        const ProductosCompanion(precioCompra: Value(2500)),
+      );
+      await pumpEventQueue();
+
+      expect(emisiones.last, 1);
+      await sub.cancel();
+    });
+
+    test('es un solo COUNT (no carga los productos)', () async {
+      final consultas = <String>[];
+      final dbEspia = AppDatabase.forTesting(
+        NativeDatabase.memory().interceptWith(_Espia(consultas)),
+      );
+      addTearDown(dbEspia.close);
+      await dbEspia
+          .into(dbEspia.productos)
+          .insert(ProductosCompanion.insert(nombre: 'X'));
+      consultas.clear();
+
+      final n = await DashboardDao(dbEspia).watchProductosSinCosto().first;
+
+      expect(n, 1);
+      final selects = consultas.where(
+        (c) => c.toUpperCase().startsWith('SELECT'),
+      );
+      expect(selects, isNotEmpty);
+      for (final q in selects) {
+        expect(q.toUpperCase(), contains('COUNT('), reason: q);
+        // No trae columnas de la fila (nombre, precios...).
+        expect(q.toLowerCase(), isNot(contains('"nombre"')), reason: q);
+      }
     });
   });
 

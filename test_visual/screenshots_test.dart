@@ -18,11 +18,17 @@
 // Para agregar una captura: en el escenario que corresponda, navega con
 // `sesion.ir('/ruta')` y llama a `sesion.capturar('nombre')`.
 
+import 'package:app_gestion/core/database/app_database.dart'
+    show ProductosCompanion;
 import 'package:app_gestion/core/database/enums.dart';
+import 'package:app_gestion/features/ai_chat/presentation/providers/ai_chat_providers.dart';
+import 'package:app_gestion/features/auth/presentation/providers/auth_providers.dart';
 import 'package:app_gestion/features/backup/presentation/providers/backup_providers.dart';
+import 'package:app_gestion/features/license/domain/entities/licencia.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'helpers/estados_visuales.dart';
 import 'helpers/respaldo_visual.dart';
 import 'helpers/visual_harness.dart';
 
@@ -611,6 +617,186 @@ void main() {
 
         await sesion.ir('/datos', apilar: true);
         await sesion.capturar('datos_texto_grande');
+      },
+    );
+  });
+
+  // -- Entrada a la app: cada estado necesita su propia licencia/sesión. ----
+
+  testWidgets('teléfono · entrada · activación de licencia', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · entrada · activación de licencia',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      licencia: () => LicenciaVisual(const SinLicencia()),
+      cuerpo: (sesion) async {
+        await sesion.capturar('activacion');
+        await sesion.tocarTexto('¿No tienes licencia? Solicítala aquí');
+        await sesion.capturar('activacion_solicitar');
+      },
+    );
+  });
+
+  testWidgets('teléfono · entrada · configuración inicial', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · entrada · configuración inicial',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      autenticacion: () => AuthVisual(const SinNegocio()),
+      cuerpo: (sesion) async {
+        await sesion.capturar('setup');
+        await sesion.escribir('Nombre del negocio', 'Colmado Doña Carmen');
+        await sesion.escribir('Tu nombre', 'Carmen Rodríguez');
+        await sesion.escribir('Contraseña', 'clave-segura');
+        await sesion.tocarTooltip('Mostrar contraseña');
+        await sesion.capturar('setup_lleno');
+      },
+    );
+  });
+
+  testWidgets('teléfono · entrada · login', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · entrada · login',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      autenticacion: () => AuthVisual(const SinSesion()),
+      cuerpo: (sesion) async {
+        await sesion.capturar('login');
+        await sesion.escribir('Contraseña', 'incorrecta');
+        await sesion.tocarTexto('Entrar');
+        await sesion.capturar('login_error');
+      },
+    );
+  });
+
+  testWidgets('teléfono · entrada · licencia bloqueada', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · entrada · licencia bloqueada',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      licencia: () => LicenciaVisual(
+        const LicenciaBloqueada(
+          'Tu licencia está suspendida. Contacta al propietario para '
+          'reactivarla.',
+        ),
+      ),
+      cuerpo: (sesion) async {
+        await sesion.capturar('bloqueada');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · perfil y suscripción', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · perfil y suscripción',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.ir('/perfil', apilar: true);
+        await sesion.capturar('perfil');
+        await sesion.mostrarTexto('Renovar');
+        await sesion.capturar('perfil_suscripcion');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · asistente de IA', (tester) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    var hayConexion = true;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · asistente de IA',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      licencia: () => LicenciaVisual.plan(TipoLicencia.nube),
+      overrides: [
+        aiChatRemoteDatasourceProvider.overrideWithValue(IaVisual()),
+        aiChatConfiguradoProvider.overrideWith((ref) => true),
+        aiChatHayConexionProvider.overrideWith(
+          (ref) =>
+              () async => hayConexion,
+        ),
+      ],
+      cuerpo: (sesion) async {
+        await sesion.ir('/asistente', apilar: true);
+        await sesion.capturar('chat_ia_vacio');
+
+        // Con respuesta.
+        await sesion.tocarTexto('¿Cuánto vendí este mes?');
+        await sesion.capturar('chat_ia_respuesta');
+
+        // Sin conexión: aviso claro y "Reintentar".
+        hayConexion = false;
+        await sesion.escribirEnUltimoCampo('¿Y las compras?');
+        await sesion.tocarTooltip('Enviar pregunta');
+        await sesion.capturar('chat_ia_sin_conexion');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · asistente de IA sin configurar', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · asistente de IA sin configurar',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      licencia: () => LicenciaVisual.plan(TipoLicencia.nube),
+      overrides: [
+        aiChatRemoteDatasourceProvider.overrideWithValue(IaVisual()),
+        // Sin servidor de IA en esta versión (o sin clave en el servidor).
+        aiChatConfiguradoProvider.overrideWith((ref) => false),
+      ],
+      cuerpo: (sesion) async {
+        await sesion.ir('/asistente', apilar: true);
+        await sesion.tocarTexto('¿Cuánto vendí este mes?');
+        await sesion.capturar('chat_ia_sin_configurar');
+      },
+    );
+  });
+
+  testWidgets('teléfono · administrador · inicio con productos sin costo', (
+    tester,
+  ) async {
+    final base = (await tester.runAsync(crearBaseDemo))!;
+    await tester.runAsync(() async {
+      for (final nombre in ['Yuca', 'Plátano verde', 'Auyama']) {
+        await base.db
+            .into(base.db.productos)
+            .insert(ProductosCompanion.insert(nombre: nombre));
+      }
+    });
+    await escenarioVisual(
+      tester,
+      nombre: 'teléfono · administrador · inicio con productos sin costo',
+      base: base,
+      rol: RolUsuario.administrador,
+      tamano: TamanoPantalla.telefono,
+      cuerpo: (sesion) async {
+        await sesion.capturar('inicio_sin_costo');
+        await sesion.tocarTextoQueContiene('productos sin costo');
+        await sesion.capturar('productos_sin_costo');
       },
     );
   });

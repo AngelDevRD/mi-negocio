@@ -43,6 +43,7 @@ class FakeRemote implements LicenseRemoteDatasource {
     required String deviceId,
     required String tipoDeseado,
   }) async {
+    if (lanzarErrorDeRed) throw Exception('sin red');
     return const RemoteLicenseResponse(ok: true, mensaje: 'Solicitud enviada.');
   }
 
@@ -241,6 +242,28 @@ void main() {
       expect(result.isOk, isFalse);
       expect((result as Fail).failure, isA<NetworkFailure>());
     });
+
+    test(
+      'una excepción de red NO filtra su detalle técnico al mensaje',
+      () async {
+        online = true;
+        remote.lanzarErrorDeRed = true;
+
+        final activar = await crearRepo().activarConClave('CLAVE-9');
+        final solicitar = await crearRepo().solicitarLicencia(
+          nombreNegocio: 'Colmado',
+          tipoDeseado: 'local',
+        );
+
+        for (final r in [activar, solicitar]) {
+          final fallo = (r as Fail).failure;
+          expect(fallo, isA<NetworkFailure>());
+          expect(fallo.message, contains('No se pudo conectar'));
+          expect(fallo.message, isNot(contains('sin red')));
+          expect(fallo.message, isNot(contains('Exception')));
+        }
+      },
+    );
 
     test('sin Supabase configurado la activación remota falla claro', () async {
       remote.disponible = false;

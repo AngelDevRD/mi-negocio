@@ -70,6 +70,11 @@ final productosBajoStockProvider = StreamProvider<List<ProductoBajoStock>>((
   return ref.watch(dashboardDaoProvider).watchProductosBajoStock();
 });
 
+/// Productos activos sin costo (solo el Administrador ve el aviso).
+final productosSinCostoProvider = StreamProvider<int>((ref) {
+  return ref.watch(dashboardDaoProvider).watchProductosSinCosto();
+});
+
 final movimientosRecientesProvider = StreamProvider<List<MovimientoReciente>>((
   ref,
 ) {
