@@ -129,12 +129,12 @@ jobs:
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
 
       - name: Renombrar artefacto
-        run: cp build/app/outputs/flutter-apk/app-release.apk mi-negocio-android.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk mitienda360-android.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: mi-negocio-android.apk
+          path: mitienda360-android.apk
 
   build-windows:
     needs: [version, verify-version]
@@ -168,12 +168,12 @@ jobs:
 
       - name: Empaquetar build de Windows
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath mi-negocio-windows.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath mitienda360-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: mi-negocio-windows.zip
+          path: mitienda360-windows.zip
 
   release:
     needs: [version, build-android, build-windows]
@@ -197,8 +197,8 @@ jobs:
           fi
           for intento in 1 2 3; do
             if gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              android-apk/mi-negocio-android.apk \
-              windows-zip/mi-negocio-windows.zip; then
+              android-apk/mitienda360-android.apk \
+              windows-zip/mitienda360-windows.zip; then
               break
             fi
             if [ "$intento" = 3 ]; then
