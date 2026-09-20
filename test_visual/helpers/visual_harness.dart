@@ -656,7 +656,7 @@ class _AppVisual extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'Mi Negocio',
+      title: 'MiTienda 360',
       debugShowCheckedModeBanner: false,
       theme: _temaVisual(),
       routerConfig: ref.watch(appRouterProvider),

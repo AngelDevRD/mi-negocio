@@ -29,7 +29,7 @@ class AppGestion extends ConsumerWidget {
     }
 
     return MaterialApp.router(
-      title: 'Mi Negocio',
+      title: 'MiTienda 360',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: router,

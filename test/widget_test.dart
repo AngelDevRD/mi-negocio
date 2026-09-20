@@ -22,7 +22,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Mi Negocio'), findsOneWidget);
+    expect(find.text('MiTienda 360'), findsOneWidget);
     expect(find.text('Comenzar prueba gratis'), findsOneWidget);
   });
 

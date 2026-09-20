@@ -88,7 +88,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                   Icon(Icons.storefront, size: 64, color: scheme.primary),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'Mi Negocio',
+                    'MiTienda 360',
                     style: textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),

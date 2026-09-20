@@ -1,4 +1,4 @@
-# Arquitectura — App Gestión Negocios
+# Arquitectura — MiTienda 360
 
 **Stack:** Flutter (Android + iOS) · Riverpod 3 (estado + DI) · Drift/SQLite (offline-first) · go_router · freezed · Supabase (desde F3).
 **Patrón:** Clean Architecture por feature + Repository Pattern.

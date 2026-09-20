@@ -1,6 +1,6 @@
 # Documento de Especificaciones Funcionales y Técnicas
 
-**Proyecto:** App Gestión Negocios — Sistema de gestión para embutidoras, colmados y pequeños negocios alimenticios
+**Proyecto:** MiTienda 360 — Sistema de gestión para colmados y pequeños negocios de barrio (offline-first)
 **Versión:** 1.0 · **Fecha:** 2026-06-10 · **Estado:** Borrador para aprobación (Fase 0)
 **Plataformas:** Android + iOS (Flutter) · Panel administrativo del propietario: app Flutter separada
 

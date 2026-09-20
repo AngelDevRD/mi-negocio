@@ -19,7 +19,7 @@ class NotificationService {
       macOS: DarwinInitializationSettings(),
       linux: LinuxInitializationSettings(defaultActionName: 'Abrir'),
       windows: WindowsInitializationSettings(
-        appName: 'Mi Negocio',
+        appName: 'MiTienda 360',
         appUserModelId: 'com.angeldevrd.appgestion',
         guid: 'a6e8f1c2-9b3d-4f7a-8e1c-2d4b6a9f0c3e',
       ),

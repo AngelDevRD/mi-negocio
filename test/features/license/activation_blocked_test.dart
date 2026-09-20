@@ -108,12 +108,12 @@ Future<_LicenciaFalsa> _montar(
 
 void main() {
   group('activación', () {
-    testWidgets('muestra el nombre único "Mi Negocio" y las dos opciones', (
+    testWidgets('muestra el nombre único "MiTienda 360" y las dos opciones', (
       tester,
     ) async {
       await _montar(tester, const ActivationScreen());
 
-      expect(find.text('Mi Negocio'), findsOneWidget);
+      expect(find.text('MiTienda 360'), findsOneWidget);
       expect(find.text('App Gestión Negocios'), findsNothing);
       expect(find.text('Activar licencia'), findsOneWidget);
       expect(find.text('Comenzar prueba gratis'), findsOneWidget);

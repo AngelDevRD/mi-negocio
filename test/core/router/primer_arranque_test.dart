@@ -109,7 +109,7 @@ void main() {
       () => find.text('Comenzar prueba gratis').evaluate().isNotEmpty,
       motivo: 'pantalla de activación',
     );
-    expect(find.text('Mi Negocio'), findsOneWidget);
+    expect(find.text('MiTienda 360'), findsOneWidget);
 
     // 2. Demo → sin negocio registrado: configuración inicial.
     await tester.tap(find.text('Comenzar prueba gratis'));

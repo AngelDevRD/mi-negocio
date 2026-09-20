@@ -124,11 +124,11 @@ bool _oculta(WidgetTester tester, Finder campo) => tester
 
 void main() {
   group('login', () {
-    testWidgets('marca "Mi Negocio", usuario elegido y foco en la '
+    testWidgets('marca "MiTienda 360", usuario elegido y foco en la '
         'contraseña', (tester) async {
       await _montar(tester, const LoginScreen());
 
-      expect(find.text('Mi Negocio'), findsOneWidget);
+      expect(find.text('MiTienda 360'), findsOneWidget);
       expect(find.text('Ana Admin'), findsOneWidget);
       final editable = tester.widget<EditableText>(
         find.descendant(

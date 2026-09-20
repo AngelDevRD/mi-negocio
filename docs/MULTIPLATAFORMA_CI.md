@@ -59,7 +59,7 @@ identifiquen la misma app.
 
 `windows/runner/Runner.rc` y `windows/runner/main.cpp` traían el nombre por defecto
 `app_gestion` (título de ventana, `ProductName`, `FileDescription`). Se cambiaron a
-"Mi Negocio" para que coincida con `android:label` en el manifest de Android.
+"MiTienda 360" para que coincida con `android:label` en el manifest de Android.
 
 ### 2.5 Firma de Android para release
 
@@ -172,7 +172,7 @@ Sin estos 4 puntos, `android-workflow` y `windows-workflow` funcionan igual — 
   "Tomar foto" en escritorio (image_picker no soporta cámara ahí).
 - `ios/Runner.xcodeproj/project.pbxproj` — bundle id `com.example.appGestion` →
   `com.angeldevrd.appgestion`.
-- `windows/runner/Runner.rc`, `windows/runner/main.cpp` — branding "Mi Negocio".
+- `windows/runner/Runner.rc`, `windows/runner/main.cpp` — branding "MiTienda 360".
 - `android/app/build.gradle.kts` — signing config de release listo para CI (keystore vía
   variables de entorno, con fallback a debug en local).
 
